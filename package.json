@@ -1,0 +1,41 @@
+{
+  "name": "git-vision",
+  "version": "1.0.0",
+  "description": "Zero-config CLI to analyze Git history — surfaces risky files, unstable modules, knowledge silos, and hidden dependencies.",
+  "type": "module",
+  "bin": {
+    "git-vision": "./bin/cli.js"
+  },
+  "main": "src/index.js",
+  "scripts": {
+    "dev": "node bin/cli.js",
+    "test": "node --test tests/"
+  },
+  "keywords": [
+    "git",
+    "analysis",
+    "hotspots",
+    "churn",
+    "bus-factor",
+    "code-quality",
+    "cli",
+    "devtools",
+    "repository",
+    "coupling",
+    "technical-debt"
+  ],
+  "author": "",
+  "license": "MIT",
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "dependencies": {
+    "boxen": "^8.0.1",
+    "chalk": "^5.6.2",
+    "cli-table3": "^0.6.5",
+    "commander": "^14.0.3",
+    "open": "^11.0.0",
+    "ora": "^9.3.0",
+    "simple-git": "^3.33.0"
+  }
+}
