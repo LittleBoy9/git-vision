@@ -1,6 +1,7 @@
 import { simpleGit } from "simple-git";
 import { readFileSync, statSync, readdirSync } from "fs";
 import { join, relative } from "path";
+import { matchesPattern, DEFAULT_IGNORE_PATTERNS } from "../config/ignores.js";
 
 /**
  * Core git log parser. Extracts structured commit data from git history.
@@ -240,11 +241,15 @@ async function getRepoStats(git) {
  * Build a per-file summary from commits: churn count, unique authors, last modified, etc.
  * This is the shared data structure most analyzers consume.
  */
-export function buildFileSummaries(commits) {
+export function buildFileSummaries(commits, extraIgnores = []) {
   const files = new Map();
+  const ignorePatterns = [...DEFAULT_IGNORE_PATTERNS, ...extraIgnores];
 
   for (const commit of commits) {
     for (const file of commit.files) {
+      // Smart ignore: skip lock files, binaries, generated code
+      if (matchesPattern(file.path, ignorePatterns)) continue;
+
       if (!files.has(file.path)) {
         files.set(file.path, {
           path: file.path,

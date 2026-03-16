@@ -5,6 +5,7 @@ A zero-config CLI tool that analyzes Git history to surface risky files, unstabl
 
 ## Package
 - **Name**: `git-vision`
+- **Version**: 2.0.0
 - **Registry**: npm
 - **License**: MIT
 - **Entry point**: `bin/cli.js`
@@ -18,20 +19,27 @@ git-vision/
 ├── src/
 │   ├── index.js                # Main orchestrator
 │   ├── git/parser.js           # Git log extraction & parsing
+│   ├── config/
+│   │   ├── loader.js           # .gitvisionrc config loading & merging
+│   │   ├── ignores.js          # Smart default ignore patterns
+│   │   └── init.js             # Auto-detect project type & generate config
 │   ├── analyzers/
-│   │   ├── hotspots.js         # Churn × complexity = risk score
+│   │   ├── hotspots.js         # Churn × complexity = risk score (test-aware)
 │   │   ├── coupling.js         # Files that change together
 │   │   ├── busFactor.js        # Single-owner file detection
 │   │   ├── codeAge.js          # Stale zones & recently volatile files
-│   │   └── contributors.js     # Per-module contributor patterns
+│   │   ├── contributors.js     # Per-module contributor patterns
+│   │   ├── blame.js            # V2: Line-level ownership via git blame
+│   │   ├── trends.js           # V2: Period comparison & trend tracking
+│   │   ├── monorepo.js         # V2: Per-workspace analysis
+│   │   └── diff.js             # PR/branch risk analysis
 │   ├── scoring/
 │   │   └── healthScore.js      # Repo health 0-100 + recommendations
 │   └── formatters/
 │       ├── terminal.js         # Beautiful chalk + cli-table3 output
 │       ├── json.js             # CI-friendly JSON output
-│       └── html.js             # Browser-based HTML report
-├── templates/
-│   └── report.html             # HTML report template
+│       ├── html.js             # Browser-based HTML report
+│       └── treemap.js          # V2: Squarified treemap visualization
 ├── package.json
 ├── CLAUDE.md
 └── README.md
@@ -42,6 +50,7 @@ git-vision/
 - **Zero config**: Works by running `npx git-vision` in any git repo
 - **Pure git log**: No GitHub/GitLab API needed — works on any local repo
 - **No build step**: Plain Node.js, no transpilation
+- **Config merging**: defaults < .gitvisionrc < CLI flags (CLI always wins)
 
 ## Dependencies
 - `simple-git` — git log extraction
@@ -50,6 +59,7 @@ git-vision/
 - `cli-table3` — table formatting
 - `boxen` — box drawing for headers
 - `ora` — loading spinners
+- `open` — opening HTML reports in browser
 
 ## Commands
 ```bash
@@ -60,57 +70,110 @@ npm test             # Run tests (when added)
 
 ## Analysis Modules
 
-### 1. Hotspots (hotspots.js)
+### V1 Core
+
+#### 1. Hotspots (hotspots.js)
 - **Formula**: `risk = churn_frequency × file_size_lines`
 - Parse `git log --numstat` for change counts
 - Count LOC per file for complexity proxy
-- Rank by combined score
+- Rank by combined score, normalized 0-100
 
-### 2. Change Coupling (coupling.js)
+#### 2. Change Coupling (coupling.js)
 - Files appearing in same commit > N times are coupled
 - Default: min 5 shared commits, 30% coupling degree
 - Detects hidden architectural dependencies
+- Prioritizes cross-module coupling
 
-### 3. Bus Factor (busFactor.js)
+#### 3. Bus Factor (busFactor.js)
 - Per file: author ownership % from git log
 - Flag files where 1 author owns >80% of changes
 - Aggregate per folder/module
 
-### 4. Code Age (codeAge.js)
+#### 4. Code Age (codeAge.js)
 - Last modified date per file
-- Identify stale zones (no changes in months)
-- Identify volatile files (recent spike in changes)
+- Categories: ancient (>1yr), stale (>6mo), aging (>3mo), active, volatile
+- Identify volatile files (recent spike in changes vs historical average)
 
-### 5. Contributor Patterns (contributors.js)
+#### 5. Contributor Patterns (contributors.js)
 - Top contributors per module (folder)
-- Team fragmentation score
+- Shannon entropy-based fragmentation score
 - Knowledge distribution
 
-### 6. Health Score (healthScore.js)
+#### 6. Health Score (healthScore.js)
 - Composite 0-100 score from all analyzers
-- Plain English recommendations
-- Top risks summary
+- Weights: hotspots 30%, bus factor 25%, coupling 20%, code age 15%, team 10%
+- Letter grade (A-F) with plain English recommendations
+
+### V2 Additions
+
+#### 7. Git Blame (blame.js)
+- Line-level ownership via `git blame --line-porcelain`
+- More accurate than commit counting (a full rewrite > 10 typo fixes)
+- Shows current code ownership, not historical
+- Opt-in via `--blame` flag (slower)
+
+#### 8. Trend Tracking (trends.js)
+- Compare two equal time periods (e.g., last 3mo vs previous 3mo)
+- Tracks: hotspot movement, bus factor changes, churn velocity, contributor flow
+- Detects new hotspots, resolved hotspots, worsening/improving files
+- Overall direction: improving / stable / declining
+
+#### 9. Monorepo Support (monorepo.js)
+- Auto-detects workspaces from package.json, pnpm-workspace.yaml, lerna.json
+- Filters commits per workspace and runs full analysis independently
+- Per-workspace health scores
+- `--workspace` flag or `monorepo` subcommand
+
+#### 10. Config Loader (config/loader.js)
+- Reads `.gitvisionrc` or `.gitvisionrc.json` from repo root
+- Deep merges with defaults
+- CLI flags override everything
+- Configurable thresholds for all analyzers
+
+#### 11. Treemap Visualization (formatters/treemap.js)
+- Squarified treemap algorithm (pure JS, no deps)
+- Rectangle size = LOC, color = risk score
+- Canvas-based with hover tooltips
+- Embedded in HTML report
 
 ## Output Formats
-- `--format terminal` (default) — colored, box-drawn tables
-- `--format json` — structured JSON for CI/CD
-- `--format html` — opens browser with visual report
+- `--format terminal` (default) — colored, box-drawn tables with V2 sections
+- `--format json` — structured JSON for CI/CD (includes V2 data)
+- `--format html` — browser report with treemap visualization
 
 ## CLI Flags
 - `--format <type>` — output format (terminal|json|html)
 - `--since <period>` — limit analysis window (e.g., 6months, 1year)
 - `--top <n>` — number of results to show (default 10)
 - `--ignore <patterns>` — comma-separated glob patterns to exclude
-- Subcommands: hotspots, coupling, bus-factor, age, contributors
+- `--path <dir>` — path to git repository
+- `--blame` — enable git blame analysis (V2)
+- `--compare <period>` — compare time periods (V2)
+- `--workspace [path]` — enable monorepo mode (V2)
+- Subcommands: hotspots, coupling, bus-factor, age, contributors, blame, trends, monorepo, diff, init
 
-## Future Plans (V2+)
+## Smart Defaults
+- Auto-filters lock files, binaries, generated code, node_modules, dist, etc.
+- Test files (.test.js, .spec.ts, etc.) are dampened in hotspot scoring (0.3x weight)
+- Config files (.eslintrc, tsconfig, etc.) excluded from hotspot ranking
+- Full ignore list in `src/config/ignores.js`
+
+## Diff / PR Risk Analysis
+- `git-vision diff <branch>` — scores risk of a branch/PR
+- Risk factors: hotspot files touched, bus-factor-1 files, missing coupled files, diff size
+- Normalized 0-100 risk score with levels: low/medium/high/critical
+- Exit code 1 on critical risk (CI-friendly)
+
+## Init / Project Detection
+- `git-vision init` — auto-detects project type and generates .gitvisionrc.json
+- Supports: Node.js, Next.js, Python, Go, Rust, Java, Ruby, PHP
+- Auto-detects monorepo (workspaces, pnpm, lerna)
+
+## Future Plans (V3+)
 - [ ] AI-powered summary (LLM explains repo health in plain English)
 - [ ] GitHub Action (run on every PR, comment with risk analysis)
-- [ ] PR Risk Score (flag PRs that touch hotspot files)
-- [ ] Trend tracking (week-over-week health comparison)
 - [ ] Interactive terminal mode (drill into files/authors)
-- [ ] `.gitvisionrc` config file support
-- [ ] Treemap visualization in HTML report
-- [ ] Git blame integration for deeper ownership analysis
-- [ ] Monorepo support (analyze sub-packages independently)
 - [ ] Benchmark mode (compare two branches)
+- [ ] Export to CSV/PDF
+- [ ] Watch mode (re-run on new commits)
+- [ ] Custom scoring weights via config

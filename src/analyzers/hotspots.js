@@ -6,19 +6,45 @@
  * These files are statistically where bugs are most likely to appear.
  */
 
+import { isHotspotExcluded } from "../config/ignores.js";
+
+// Test file patterns — tracked but scored lower
+const TEST_PATTERNS = [
+  /\.test\.[jt]sx?$/,
+  /\.spec\.[jt]sx?$/,
+  /__tests__\//,
+  /\.stories\.[jt]sx?$/,
+  /\.e2e\.[jt]sx?$/,
+  /test\//,
+  /tests\//,
+  /spec\//,
+];
+
+function isTestFile(path) {
+  return TEST_PATTERNS.some((p) => p.test(path));
+}
+
 export function analyzeHotspots(fileSummaries, getFileLOC, options = {}) {
   const top = options.top || 10;
   const results = [];
 
   for (const [path, summary] of fileSummaries) {
+    // Skip config files that are always noise in hotspot analysis
+    if (isHotspotExcluded(path)) continue;
+
     const loc = getFileLOC(path);
 
     // Skip files with no LOC (deleted or binary)
     if (loc.total === 0) continue;
 
     // Hotspot score: churn × lines of code (non-empty)
-    // Normalized later for display
-    const score = summary.churn * loc.nonEmpty;
+    let score = summary.churn * loc.nonEmpty;
+
+    // Dampen test files — they churn a lot but are low risk
+    const isTest = isTestFile(path);
+    if (isTest) {
+      score = Math.round(score * 0.3);
+    }
 
     results.push({
       path,
@@ -28,6 +54,7 @@ export function analyzeHotspots(fileSummaries, getFileLOC, options = {}) {
       totalLines: loc.total,
       authors: summary.authors.size,
       lastModified: summary.lastModified,
+      isTest,
     });
   }
 

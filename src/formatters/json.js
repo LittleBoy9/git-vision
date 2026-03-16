@@ -5,7 +5,7 @@
 
 export function formatJSON(report) {
   const output = {
-    version: "1.0.0",
+    version: "2.0.0",
     generatedAt: new Date().toISOString(),
     repository: {
       branch: report.repoStats.currentBranch,
@@ -64,6 +64,69 @@ export function formatJSON(report) {
       topContributors: report.contributors.topContributors,
       modules: report.contributors.modules,
       stats: report.contributors.stats,
+    };
+  }
+
+  // V2 sections
+  if (report.blame) {
+    output.blame = {
+      results: report.blame.results.map((r) => ({
+        path: r.path,
+        totalLines: r.totalLines,
+        trueOwner: r.trueOwner,
+        busFactor: r.busFactor,
+        authors: r.authors,
+      })),
+      globalAuthors: report.blame.globalAuthors,
+      stats: report.blame.stats,
+    };
+  }
+
+  if (report.trends) {
+    output.trends = {
+      overallDirection: report.trends.overallDirection,
+      period: report.trends.period,
+      hotspotTrends: report.trends.hotspotTrends,
+      churn: report.trends.churn,
+      busFactor: report.trends.busFactor,
+      contributors: report.trends.contributors,
+      stats: report.trends.stats,
+    };
+  }
+
+  if (report.monorepo) {
+    output.monorepo = {
+      detected: report.monorepo.detected,
+      total: report.monorepo.total,
+      workspaces: report.monorepo.workspaces?.map((ws) => ({
+        name: ws.workspace.name,
+        path: ws.workspace.path,
+        skipped: ws.skipped,
+        healthScore: ws.skipped ? null : ws.healthScore?.overall,
+        grade: ws.skipped ? null : ws.healthScore?.grade?.letter,
+        stats: ws.stats || null,
+      })),
+    };
+  }
+
+  if (report.diff) {
+    output.diff = {
+      riskScore: report.diff.riskScore,
+      riskLevel: report.diff.riskLevel,
+      base: report.diff.base,
+      head: report.diff.head,
+      changedFiles: report.diff.changedFiles.map((f) => ({
+        path: f.path,
+        additions: f.additions,
+        deletions: f.deletions,
+        hotspotScore: f.hotspotScore,
+        busFactor: f.busFactor,
+        isHotspot: f.isHotspot,
+        isBusFactorRisk: f.isBusFactorRisk,
+        risks: f.risks,
+      })),
+      risks: report.diff.risks,
+      stats: report.diff.stats,
     };
   }
 

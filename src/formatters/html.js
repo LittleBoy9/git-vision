@@ -1,6 +1,7 @@
 import { writeFileSync } from "fs";
 import { join } from "path";
 import { tmpdir } from "os";
+import { generateTreemapHTML } from "./treemap.js";
 
 /**
  * HTML Formatter
@@ -8,6 +9,7 @@ import { tmpdir } from "os";
  */
 
 export function formatHTML(report) {
+  const treemapSection = report.hotspots ? generateTreemapHTML(report.hotspots) : "";
   const data = JSON.stringify(report, null, 2);
 
   return `<!DOCTYPE html>
@@ -142,11 +144,15 @@ export function formatHTML(report) {
   <div class="subtitle" id="subtitle"></div>
 
   <div id="score-section"></div>
+  <div id="treemap-section">${treemapSection}</div>
   <div id="hotspots-section"></div>
   <div id="bus-factor-section"></div>
   <div id="coupling-section"></div>
   <div id="code-age-section"></div>
   <div id="contributors-section"></div>
+  <div id="blame-section"></div>
+  <div id="trends-section"></div>
+  <div id="monorepo-section"></div>
   <div id="recommendations-section"></div>
 
   <div class="footer">
@@ -273,6 +279,55 @@ export function formatHTML(report) {
       ).join('');
       document.getElementById('recommendations-section').innerHTML =
         '<h2>Recommendations</h2>' + recs;
+    }
+
+    // V2: Blame
+    if (report.blame && report.blame.results?.length) {
+      const rows = report.blame.results.filter(r => r.trueOwner && r.trueOwner.percentage >= 50).slice(0, 10).map(r =>
+        '<tr><td>' + r.path + '</td>' +
+        '<td>' + (r.trueOwner?.author || '—') + '</td>' +
+        '<td><span class="tag ' + (r.trueOwner.percentage >= 80 ? 'tag-high' : 'tag-medium') + '">' + r.trueOwner.percentage + '%</span></td>' +
+        '<td>' + r.busFactor + '</td></tr>'
+      ).join('');
+      document.getElementById('blame-section').innerHTML =
+        '<h2>True Ownership (git blame)</h2>' +
+        '<table><tr><th>File</th><th>True Owner</th><th>Lines Owned</th><th>Bus Factor</th></tr>' +
+        rows + '</table>';
+    }
+
+    // V2: Trends
+    if (report.trends) {
+      const t = report.trends;
+      const dirClass = t.overallDirection === 'improving' ? 'good' : t.overallDirection === 'declining' ? 'bad' : 'fair';
+      let html = '<h2>Trend Analysis</h2>' +
+        '<div class="score-card" style="text-align:left;padding:1.2rem">' +
+        '<div style="font-size:1.3rem;font-weight:700" class="score-big ' + dirClass + '">' +
+        (t.overallDirection === 'improving' ? '&#9650;' : t.overallDirection === 'declining' ? '&#9660;' : '&#9644;') +
+        ' ' + t.overallDirection.toUpperCase() + '</div>' +
+        '<p style="color:#8b949e;margin:0.5rem 0">' + t.description + '</p>' +
+        '<div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;margin-top:1rem">' +
+        '<div><span style="color:#8b949e">Churn velocity:</span> <strong>' + (t.churn.changePercent > 0 ? '+' : '') + t.churn.changePercent + '%</strong></div>' +
+        '<div><span style="color:#8b949e">Bus factor risk:</span> <strong>' + t.busFactor.recent + '% risky</strong> (was ' + t.busFactor.older + '%)</div>' +
+        '<div><span style="color:#8b949e">Recent commits:</span> ' + t.period.recent.commits + '</div>' +
+        '<div><span style="color:#8b949e">Previous commits:</span> ' + t.period.older.commits + '</div>' +
+        '</div></div>';
+      document.getElementById('trends-section').innerHTML = html;
+    }
+
+    // V2: Monorepo
+    if (report.monorepo && report.monorepo.detected && report.monorepo.workspaces?.length) {
+      const rows = report.monorepo.workspaces.map(ws => {
+        if (ws.skipped) return '<tr><td>' + ws.workspace.name + '</td><td colspan="3" style="color:#8b949e">' + ws.reason + '</td></tr>';
+        const scoreClass = ws.healthScore.overall >= 75 ? 'good' : ws.healthScore.overall >= 50 ? 'fair' : 'bad';
+        return '<tr><td><strong>' + ws.workspace.name + '</strong></td>' +
+          '<td><span class="score-big ' + scoreClass + '" style="font-size:1.1rem">' + ws.healthScore.overall + '</span></td>' +
+          '<td>' + ws.healthScore.grade.letter + '</td>' +
+          '<td>' + ws.stats.commits + ' commits / ' + ws.stats.files + ' files</td></tr>';
+      }).join('');
+      document.getElementById('monorepo-section').innerHTML =
+        '<h2>Monorepo Analysis</h2>' +
+        '<table><tr><th>Workspace</th><th>Score</th><th>Grade</th><th>Activity</th></tr>' +
+        rows + '</table>';
     }
   </script>
 </body>
