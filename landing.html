@@ -1,0 +1,749 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>git-vision — See Your Codebase Like Never Before</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+:root{
+  --git-orange:#f05033;
+  --git-red:#de4c36;
+  --git-dark:#1a1a2e;
+  --git-darker:#0f0f1a;
+  --git-light:#f0f6fc;
+  --git-dim:#8b949e;
+  --accent:#f97316;
+  --accent2:#fb923c;
+  --green:#3fb950;
+  --cyan:#58a6ff;
+  --purple:#a855f7;
+  --yellow:#eab308;
+}
+html{scroll-behavior:smooth}
+body{
+  font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;
+  background:var(--git-darker);
+  color:var(--git-light);
+  overflow-x:hidden;
+}
+
+/* ─── 3D SCENE CANVAS ─── */
+#scene{position:fixed;top:0;left:0;width:100%;height:100%;z-index:0;pointer-events:none}
+
+/* ─── FLOATING PARTICLES ─── */
+.particles{position:fixed;top:0;left:0;width:100%;height:100%;z-index:1;pointer-events:none;overflow:hidden}
+.particle{
+  position:absolute;
+  border-radius:50%;
+  opacity:0;
+  animation:particleFloat linear infinite;
+}
+@keyframes particleFloat{
+  0%{transform:translateY(100vh) translateX(0) scale(0);opacity:0}
+  10%{opacity:1}
+  90%{opacity:1}
+  100%{transform:translateY(-10vh) translateX(var(--drift)) scale(1);opacity:0}
+}
+
+/* ─── GRID FLOOR ─── */
+.grid-floor{
+  position:fixed;bottom:0;left:0;width:100%;height:60vh;z-index:0;
+  background:
+    linear-gradient(transparent 60%,var(--git-darker)),
+    repeating-linear-gradient(90deg,rgba(240,80,51,0.06) 0,rgba(240,80,51,0.06) 1px,transparent 1px,transparent 80px),
+    repeating-linear-gradient(0deg,rgba(240,80,51,0.06) 0,rgba(240,80,51,0.06) 1px,transparent 1px,transparent 80px);
+  transform:perspective(500px) rotateX(60deg);
+  transform-origin:bottom;
+  animation:gridPulse 4s ease-in-out infinite alternate;
+}
+@keyframes gridPulse{
+  0%{opacity:0.4}100%{opacity:0.8}
+}
+
+/* ─── CONTENT ─── */
+.content{position:relative;z-index:10}
+
+/* ─── HERO ─── */
+.hero{
+  min-height:100vh;display:flex;flex-direction:column;
+  align-items:center;justify-content:center;text-align:center;
+  padding:2rem;position:relative;
+}
+.hero::before{
+  content:'';position:absolute;width:600px;height:600px;
+  background:radial-gradient(circle,rgba(240,80,51,0.15),transparent 70%);
+  border-radius:50%;top:50%;left:50%;transform:translate(-50%,-50%);
+  animation:heroPulse 6s ease-in-out infinite alternate;
+  pointer-events:none;
+}
+@keyframes heroPulse{
+  0%{transform:translate(-50%,-50%) scale(1);opacity:0.5}
+  100%{transform:translate(-50%,-50%) scale(1.3);opacity:0.8}
+}
+
+.logo-3d{
+  font-size:clamp(3.5rem,10vw,7rem);font-weight:900;
+  letter-spacing:-0.04em;line-height:1.15;padding-bottom:0.05em;
+  background:linear-gradient(135deg,var(--git-orange),var(--accent2),var(--yellow));
+  -webkit-background-clip:text;-webkit-text-fill-color:transparent;
+  background-clip:text;
+  text-shadow:none;
+  position:relative;
+  animation:logoEntrance 1.2s cubic-bezier(0.16,1,0.3,1) both;
+  transform-style:preserve-3d;
+  perspective:800px;
+}
+.logo-3d::after{
+  content:'git-vision';position:absolute;left:0;top:0;
+  background:linear-gradient(135deg,rgba(240,80,51,0.3),rgba(251,146,60,0.1));
+  -webkit-background-clip:text;-webkit-text-fill-color:transparent;
+  background-clip:text;
+  transform:translateZ(-40px) translateY(6px);
+  filter:blur(8px);z-index:-1;
+}
+@keyframes logoEntrance{
+  0%{opacity:0;transform:translateY(60px) rotateX(40deg) scale(0.8)}
+  100%{opacity:1;transform:translateY(0) rotateX(0) scale(1)}
+}
+
+.tagline{
+  font-size:clamp(1.1rem,3vw,1.5rem);color:var(--git-dim);
+  margin-top:1.2rem;max-width:600px;
+  animation:fadeUp 1s 0.3s cubic-bezier(0.16,1,0.3,1) both;
+}
+.tagline strong{color:var(--git-light)}
+
+@keyframes fadeUp{
+  0%{opacity:0;transform:translateY(30px)}
+  100%{opacity:1;transform:translateY(0)}
+}
+
+/* Terminal demo */
+.terminal-wrapper{
+  margin-top:3rem;perspective:1200px;
+  animation:fadeUp 1s 0.6s cubic-bezier(0.16,1,0.3,1) both;
+}
+.terminal{
+  background:rgba(15,15,26,0.9);
+  border:1px solid rgba(240,80,51,0.2);
+  border-radius:12px;
+  width:min(700px,90vw);
+  padding:0;overflow:hidden;
+  box-shadow:
+    0 0 0 1px rgba(240,80,51,0.1),
+    0 20px 60px rgba(0,0,0,0.5),
+    0 0 100px rgba(240,80,51,0.08);
+  transform:rotateX(2deg) rotateY(-1deg);
+  transition:transform 0.6s cubic-bezier(0.16,1,0.3,1);
+  transform-style:preserve-3d;
+}
+.terminal:hover{transform:rotateX(0) rotateY(0) scale(1.02)}
+.terminal-bar{
+  display:flex;gap:6px;padding:12px 16px;
+  background:rgba(240,80,51,0.06);border-bottom:1px solid rgba(240,80,51,0.1);
+}
+.terminal-dot{width:10px;height:10px;border-radius:50%}
+.terminal-dot:nth-child(1){background:#f85149}
+.terminal-dot:nth-child(2){background:#d29922}
+.terminal-dot:nth-child(3){background:#3fb950}
+.terminal-body{padding:20px;font-family:'SF Mono',Monaco,Consolas,monospace;font-size:0.85rem;line-height:1.7}
+.t-prompt{color:var(--green)}
+.t-cmd{color:var(--git-light);font-weight:600}
+.t-dim{color:var(--git-dim)}
+.t-orange{color:var(--git-orange)}
+.t-yellow{color:var(--yellow)}
+.t-green{color:var(--green)}
+.t-cyan{color:var(--cyan)}
+.t-red{color:var(--git-red)}
+.t-purple{color:var(--purple)}
+.t-bold{font-weight:700}
+.t-line{display:block;opacity:0;animation:typeLine 0.3s ease both}
+
+/* Install button */
+.install-section{
+  margin-top:2.5rem;display:flex;flex-direction:column;align-items:center;gap:1rem;
+  animation:fadeUp 1s 0.9s cubic-bezier(0.16,1,0.3,1) both;
+}
+.install-cmd{
+  background:rgba(240,80,51,0.08);border:1px solid rgba(240,80,51,0.3);
+  border-radius:10px;padding:14px 28px;font-family:monospace;font-size:1.1rem;
+  color:var(--git-light);cursor:pointer;transition:all 0.3s;
+  position:relative;overflow:hidden;
+}
+.install-cmd::before{
+  content:'';position:absolute;inset:0;
+  background:linear-gradient(135deg,rgba(240,80,51,0.1),transparent);
+  opacity:0;transition:opacity 0.3s;
+}
+.install-cmd:hover::before{opacity:1}
+.install-cmd:hover{
+  border-color:var(--git-orange);
+  box-shadow:0 0 30px rgba(240,80,51,0.15);
+  transform:translateY(-2px);
+}
+.install-cmd:active{transform:scale(0.98)}
+.install-hint{color:var(--git-dim);font-size:0.8rem}
+
+/* ─── FEATURES SECTION ─── */
+.features{padding:6rem 2rem;position:relative}
+.features-title{
+  text-align:center;font-size:clamp(2rem,5vw,3rem);font-weight:800;
+  margin-bottom:1rem;
+  background:linear-gradient(135deg,var(--git-light),var(--git-dim));
+  -webkit-background-clip:text;-webkit-text-fill-color:transparent;
+  background-clip:text;
+}
+.features-sub{text-align:center;color:var(--git-dim);font-size:1.1rem;margin-bottom:4rem;max-width:600px;margin-left:auto;margin-right:auto}
+
+.features-grid{
+  display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));
+  gap:1.5rem;max-width:1100px;margin:0 auto;
+}
+.feature-card{
+  background:rgba(26,26,46,0.6);
+  border:1px solid rgba(240,80,51,0.08);
+  border-radius:16px;padding:2rem;
+  position:relative;overflow:hidden;
+  transition:all 0.4s cubic-bezier(0.16,1,0.3,1);
+  transform-style:preserve-3d;
+  perspective:600px;
+  cursor:default;
+}
+.feature-card::before{
+  content:'';position:absolute;inset:0;
+  background:radial-gradient(circle at var(--mx,50%) var(--my,50%),rgba(240,80,51,0.08),transparent 60%);
+  opacity:0;transition:opacity 0.4s;pointer-events:none;
+}
+.feature-card:hover::before{opacity:1}
+.feature-card:hover{
+  border-color:rgba(240,80,51,0.25);
+  transform:translateY(-4px);
+  box-shadow:0 20px 40px rgba(0,0,0,0.3),0 0 60px rgba(240,80,51,0.06);
+}
+.feature-icon{
+  width:48px;height:48px;border-radius:12px;
+  display:flex;align-items:center;justify-content:center;
+  font-size:1.4rem;margin-bottom:1rem;
+  position:relative;
+}
+.feature-icon::after{
+  content:'';position:absolute;inset:-4px;border-radius:14px;
+  background:inherit;opacity:0.2;filter:blur(12px);z-index:-1;
+}
+.feature-card h3{font-size:1.15rem;margin-bottom:0.5rem;color:var(--git-light)}
+.feature-card p{color:var(--git-dim);font-size:0.9rem;line-height:1.6}
+
+.fi-orange{background:rgba(240,80,51,0.15);color:var(--git-orange)}
+.fi-yellow{background:rgba(234,179,8,0.15);color:var(--yellow)}
+.fi-green{background:rgba(63,185,80,0.15);color:var(--green)}
+.fi-cyan{background:rgba(88,166,255,0.15);color:var(--cyan)}
+.fi-purple{background:rgba(168,85,247,0.15);color:var(--purple)}
+.fi-red{background:rgba(248,81,73,0.15);color:var(--git-red)}
+
+/* ─── COMMANDS SHOWCASE ─── */
+.commands{padding:6rem 2rem;text-align:center}
+.commands-title{
+  font-size:clamp(2rem,5vw,3rem);font-weight:800;margin-bottom:3rem;
+  background:linear-gradient(135deg,var(--git-orange),var(--accent2));
+  -webkit-background-clip:text;-webkit-text-fill-color:transparent;
+  background-clip:text;
+}
+.cmd-grid{
+  display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));
+  gap:1rem;max-width:900px;margin:0 auto;
+}
+.cmd-item{
+  background:rgba(15,15,26,0.8);border:1px solid rgba(240,80,51,0.1);
+  border-radius:10px;padding:1.2rem;text-align:left;
+  transition:all 0.3s;cursor:default;
+}
+.cmd-item:hover{
+  border-color:rgba(240,80,51,0.3);
+  box-shadow:0 0 25px rgba(240,80,51,0.08);
+  transform:translateY(-2px);
+}
+.cmd-name{font-family:monospace;color:var(--git-orange);font-weight:700;font-size:0.95rem}
+.cmd-desc{color:var(--git-dim);font-size:0.8rem;margin-top:0.3rem}
+
+/* ─── SCORE DEMO ─── */
+.score-section{padding:6rem 2rem;display:flex;justify-content:center}
+.score-card-3d{
+  perspective:800px;
+  animation:float 6s ease-in-out infinite;
+}
+@keyframes float{
+  0%,100%{transform:translateY(0)}
+  50%{transform:translateY(-10px)}
+}
+.score-inner{
+  background:rgba(26,26,46,0.8);
+  border:1px solid rgba(240,80,51,0.15);
+  border-radius:20px;padding:3rem;text-align:center;
+  width:min(400px,90vw);
+  transform-style:preserve-3d;
+  transition:transform 0.6s cubic-bezier(0.16,1,0.3,1);
+  box-shadow:0 30px 60px rgba(0,0,0,0.4),0 0 120px rgba(240,80,51,0.06);
+}
+.score-inner:hover{transform:rotateY(5deg) rotateX(-3deg)}
+.score-number{
+  font-size:5rem;font-weight:900;
+  background:linear-gradient(135deg,var(--green),var(--cyan));
+  -webkit-background-clip:text;-webkit-text-fill-color:transparent;
+  background-clip:text;line-height:1;
+}
+.score-label{color:var(--git-dim);font-size:0.9rem;margin-top:0.5rem}
+.score-grade{font-size:1.3rem;font-weight:700;color:var(--green);margin-top:0.8rem}
+.score-bars{margin-top:1.5rem;text-align:left}
+.score-bar-row{display:flex;align-items:center;gap:10px;margin:8px 0}
+.score-bar-label{color:var(--git-dim);font-size:0.8rem;width:80px;text-align:right}
+.score-bar-track{flex:1;height:6px;background:rgba(255,255,255,0.06);border-radius:3px;overflow:hidden}
+.score-bar-fill{height:100%;border-radius:3px;transition:width 1.5s cubic-bezier(0.16,1,0.3,1)}
+
+/* ─── CTA ─── */
+.cta{
+  padding:8rem 2rem;text-align:center;position:relative;
+}
+.cta::before{
+  content:'';position:absolute;width:800px;height:400px;
+  background:radial-gradient(ellipse,rgba(240,80,51,0.12),transparent 70%);
+  top:50%;left:50%;transform:translate(-50%,-50%);pointer-events:none;
+}
+.cta-title{
+  font-size:clamp(2.5rem,6vw,4rem);font-weight:900;
+  background:linear-gradient(135deg,var(--git-orange),var(--accent2),var(--yellow));
+  -webkit-background-clip:text;-webkit-text-fill-color:transparent;
+  background-clip:text;margin-bottom:1.5rem;
+}
+.cta-sub{color:var(--git-dim);font-size:1.1rem;margin-bottom:2.5rem}
+.cta-btn{
+  display:inline-block;
+  background:linear-gradient(135deg,var(--git-orange),var(--git-red));
+  color:#fff;font-weight:700;font-size:1.1rem;
+  padding:16px 40px;border-radius:12px;text-decoration:none;
+  position:relative;overflow:hidden;
+  transition:all 0.3s;
+  box-shadow:0 4px 20px rgba(240,80,51,0.3);
+}
+.cta-btn::before{
+  content:'';position:absolute;inset:0;
+  background:linear-gradient(135deg,rgba(255,255,255,0.15),transparent);
+  opacity:0;transition:opacity 0.3s;
+}
+.cta-btn:hover{
+  transform:translateY(-3px) scale(1.02);
+  box-shadow:0 8px 40px rgba(240,80,51,0.4);
+}
+.cta-btn:hover::before{opacity:1}
+.cta-btn:active{transform:scale(0.98)}
+
+/* ─── FOOTER ─── */
+.footer{
+  padding:2rem;text-align:center;color:var(--git-dim);font-size:0.85rem;
+  border-top:1px solid rgba(240,80,51,0.08);
+}
+.footer a{color:var(--git-orange);text-decoration:none}
+.footer a:hover{text-decoration:underline}
+
+/* ─── SCROLL ANIMATIONS ─── */
+.reveal{opacity:0;transform:translateY(40px);transition:all 0.8s cubic-bezier(0.16,1,0.3,1)}
+.reveal.visible{opacity:1;transform:translateY(0)}
+.reveal-delay-1{transition-delay:0.1s}
+.reveal-delay-2{transition-delay:0.2s}
+.reveal-delay-3{transition-delay:0.3s}
+.reveal-delay-4{transition-delay:0.4s}
+.reveal-delay-5{transition-delay:0.5s}
+
+/* ─── RESPONSIVE ─── */
+@media(max-width:768px){
+  .features-grid{grid-template-columns:1fr}
+  .cmd-grid{grid-template-columns:1fr 1fr}
+  .terminal{transform:none}
+  .terminal:hover{transform:scale(1.01)}
+}
+@media(max-width:480px){
+  .cmd-grid{grid-template-columns:1fr}
+}
+</style>
+</head>
+<body>
+
+<!-- 3D Canvas -->
+<canvas id="scene"></canvas>
+
+<!-- Floating Particles -->
+<div class="particles" id="particles"></div>
+
+<!-- Grid Floor -->
+<div class="grid-floor"></div>
+
+<!-- Main Content -->
+<div class="content">
+
+  <!-- HERO -->
+  <section class="hero">
+    <div class="logo-3d">git-vision</div>
+    <p class="tagline">
+      <strong>One command.</strong> Surface risky files, knowledge silos, and hidden dependencies from your <strong>Git history</strong>.
+    </p>
+
+    <div class="terminal-wrapper">
+      <div class="terminal" id="terminal">
+        <div class="terminal-bar">
+          <div class="terminal-dot"></div>
+          <div class="terminal-dot"></div>
+          <div class="terminal-dot"></div>
+        </div>
+        <div class="terminal-body" id="terminal-body"></div>
+      </div>
+    </div>
+
+    <div class="install-section">
+      <div class="install-cmd" id="install-cmd" onclick="copyInstall()">
+        <span>npx git-vision</span>
+      </div>
+      <div class="install-hint" id="install-hint">Click to copy</div>
+    </div>
+  </section>
+
+  <!-- FEATURES -->
+  <section class="features">
+    <h2 class="features-title reveal">What It Finds</h2>
+    <p class="features-sub reveal">Your Git history tells a story. git-vision reads between the lines.</p>
+
+    <div class="features-grid">
+      <div class="feature-card reveal reveal-delay-1">
+        <div class="feature-icon fi-orange">&#9888;</div>
+        <h3>Hotspot Detection</h3>
+        <p>Files with high churn AND complexity are where bugs cluster. We find them before they find you.</p>
+      </div>
+      <div class="feature-card reveal reveal-delay-2">
+        <div class="feature-icon fi-yellow">&#9899;</div>
+        <h3>Bus Factor</h3>
+        <p>One person owns 90% of a critical file? That's a bus-factor-1 risk. We flag every single one.</p>
+      </div>
+      <div class="feature-card reveal reveal-delay-3">
+        <div class="feature-icon fi-cyan">&#8644;</div>
+        <h3>Change Coupling</h3>
+        <p>Files that always change together reveal hidden dependencies your import graph doesn't show.</p>
+      </div>
+      <div class="feature-card reveal reveal-delay-4">
+        <div class="feature-icon fi-green">&#9200;</div>
+        <h3>Code Age</h3>
+        <p>Ancient untouched code and sudden change spikes. Both are signals worth investigating.</p>
+      </div>
+      <div class="feature-card reveal reveal-delay-5">
+        <div class="feature-icon fi-purple">&#9733;</div>
+        <h3>PR Risk Scoring</h3>
+        <p>Run <code style="color:var(--git-orange)">git-vision diff main</code> to score any branch. Catches risky PRs before review.</p>
+      </div>
+      <div class="feature-card reveal reveal-delay-1">
+        <div class="feature-icon fi-red">&#9878;</div>
+        <h3>Trend Tracking</h3>
+        <p>Compare time periods. See if your codebase is getting healthier or rotting. Week over week.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- HEALTH SCORE -->
+  <section class="score-section">
+    <div class="score-card-3d reveal">
+      <div class="score-inner" id="score-card">
+        <div class="score-number" id="score-num">0</div>
+        <div class="score-label">Repository Health Score</div>
+        <div class="score-grade">B &mdash; Good</div>
+        <div class="score-bars">
+          <div class="score-bar-row">
+            <span class="score-bar-label">Hotspots</span>
+            <div class="score-bar-track"><div class="score-bar-fill" style="width:0;background:var(--green)" data-width="82%"></div></div>
+          </div>
+          <div class="score-bar-row">
+            <span class="score-bar-label">Bus Factor</span>
+            <div class="score-bar-track"><div class="score-bar-fill" style="width:0;background:var(--yellow)" data-width="65%"></div></div>
+          </div>
+          <div class="score-bar-row">
+            <span class="score-bar-label">Coupling</span>
+            <div class="score-bar-track"><div class="score-bar-fill" style="width:0;background:var(--green)" data-width="91%"></div></div>
+          </div>
+          <div class="score-bar-row">
+            <span class="score-bar-label">Code Age</span>
+            <div class="score-bar-track"><div class="score-bar-fill" style="width:0;background:var(--cyan)" data-width="70%"></div></div>
+          </div>
+          <div class="score-bar-row">
+            <span class="score-bar-label">Team</span>
+            <div class="score-bar-track"><div class="score-bar-fill" style="width:0;background:var(--purple)" data-width="88%"></div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- COMMANDS -->
+  <section class="commands">
+    <h2 class="commands-title reveal">11 Commands. Zero Config.</h2>
+    <div class="cmd-grid">
+      <div class="cmd-item reveal reveal-delay-1"><div class="cmd-name">git-vision</div><div class="cmd-desc">Full analysis with health score</div></div>
+      <div class="cmd-item reveal reveal-delay-1"><div class="cmd-name">git-vision hotspots</div><div class="cmd-desc">Riskiest files by churn x complexity</div></div>
+      <div class="cmd-item reveal reveal-delay-2"><div class="cmd-name">git-vision bus-factor</div><div class="cmd-desc">Knowledge silo detection</div></div>
+      <div class="cmd-item reveal reveal-delay-2"><div class="cmd-name">git-vision coupling</div><div class="cmd-desc">Hidden dependencies</div></div>
+      <div class="cmd-item reveal reveal-delay-3"><div class="cmd-name">git-vision age</div><div class="cmd-desc">Stale zones & volatile files</div></div>
+      <div class="cmd-item reveal reveal-delay-3"><div class="cmd-name">git-vision contributors</div><div class="cmd-desc">Team patterns & ownership</div></div>
+      <div class="cmd-item reveal reveal-delay-4"><div class="cmd-name">git-vision diff main</div><div class="cmd-desc">PR risk scoring</div></div>
+      <div class="cmd-item reveal reveal-delay-4"><div class="cmd-name">git-vision blame</div><div class="cmd-desc">True line-level ownership</div></div>
+      <div class="cmd-item reveal reveal-delay-5"><div class="cmd-name">git-vision trends</div><div class="cmd-desc">Health over time</div></div>
+      <div class="cmd-item reveal reveal-delay-5"><div class="cmd-name">git-vision monorepo</div><div class="cmd-desc">Per-workspace analysis</div></div>
+      <div class="cmd-item reveal reveal-delay-1"><div class="cmd-name">git-vision init</div><div class="cmd-desc">Generate smart config</div></div>
+      <div class="cmd-item reveal reveal-delay-1"><div class="cmd-name">--format html</div><div class="cmd-desc">Interactive treemap report</div></div>
+    </div>
+  </section>
+
+  <!-- CTA -->
+  <section class="cta">
+    <h2 class="cta-title reveal">Your Codebase Is Talking.<br>Start Listening.</h2>
+    <p class="cta-sub reveal">Works with any Git repo. GitHub, GitLab, Bitbucket, self-hosted. No API tokens needed.</p>
+    <a href="https://www.npmjs.com/package/git-vision" class="cta-btn reveal" target="_blank">npx git-vision</a>
+  </section>
+
+  <!-- FOOTER -->
+  <footer class="footer">
+    <p>git-vision &middot; MIT License &middot; <a href="https://www.npmjs.com/package/git-vision">npm</a> &middot; <a href="https://github.com/user/git-vision">GitHub</a></p>
+  </footer>
+</div>
+
+<script>
+// ─── 3D BACKGROUND SCENE (Floating Git Nodes) ───
+const canvas = document.getElementById('scene');
+const ctx = canvas.getContext('2d');
+let W, H, nodes = [], mouse = { x: 0, y: 0 };
+
+function resize() {
+  W = canvas.width = window.innerWidth;
+  H = canvas.height = window.innerHeight;
+}
+resize();
+window.addEventListener('resize', resize);
+
+// Track mouse for parallax
+document.addEventListener('mousemove', (e) => {
+  mouse.x = (e.clientX / W - 0.5) * 2;
+  mouse.y = (e.clientY / H - 0.5) * 2;
+});
+
+// Create floating 3D nodes (simulated with z-depth)
+class Node {
+  constructor() {
+    this.reset();
+    this.z = Math.random() * 1000;
+  }
+  reset() {
+    this.x = Math.random() * W;
+    this.y = Math.random() * H;
+    this.z = Math.random() * 1000;
+    this.vx = (Math.random() - 0.5) * 0.3;
+    this.vy = (Math.random() - 0.5) * 0.3;
+    this.vz = (Math.random() - 0.5) * 0.5;
+    this.size = Math.random() * 2 + 1;
+    this.hue = Math.random() > 0.6 ? 20 : Math.random() > 0.3 ? 30 : 200;
+  }
+  update() {
+    // Parallax from mouse
+    const depth = this.z / 1000;
+    const px = mouse.x * 30 * depth;
+    const py = mouse.y * 30 * depth;
+
+    this.x += this.vx + px * 0.01;
+    this.y += this.vy + py * 0.01;
+    this.z += this.vz;
+
+    if (this.x < -50 || this.x > W + 50 || this.y < -50 || this.y > H + 50 || this.z < 0 || this.z > 1000) {
+      this.reset();
+    }
+  }
+  draw() {
+    const scale = 1 - this.z / 1200;
+    const alpha = Math.max(0, scale * 0.6);
+    const r = this.size * scale * 2;
+    if (r < 0.3) return;
+
+    ctx.beginPath();
+    ctx.arc(this.x, this.y, r, 0, Math.PI * 2);
+    ctx.fillStyle = `hsla(${this.hue}, 80%, 60%, ${alpha})`;
+    ctx.fill();
+  }
+}
+
+for (let i = 0; i < 120; i++) nodes.push(new Node());
+
+// Draw connections between nearby nodes
+function drawConnections() {
+  for (let i = 0; i < nodes.length; i++) {
+    for (let j = i + 1; j < nodes.length; j++) {
+      const dx = nodes[i].x - nodes[j].x;
+      const dy = nodes[i].y - nodes[j].y;
+      const dist = Math.sqrt(dx * dx + dy * dy);
+      if (dist < 120) {
+        const alpha = (1 - dist / 120) * 0.12;
+        ctx.beginPath();
+        ctx.moveTo(nodes[i].x, nodes[i].y);
+        ctx.lineTo(nodes[j].x, nodes[j].y);
+        ctx.strokeStyle = `rgba(240, 80, 51, ${alpha})`;
+        ctx.lineWidth = 0.5;
+        ctx.stroke();
+      }
+    }
+  }
+}
+
+function animate() {
+  ctx.clearRect(0, 0, W, H);
+  nodes.forEach(n => { n.update(); n.draw(); });
+  drawConnections();
+  requestAnimationFrame(animate);
+}
+animate();
+
+// ─── PARTICLES ───
+const particlesEl = document.getElementById('particles');
+function createParticle() {
+  const p = document.createElement('div');
+  p.className = 'particle';
+  const size = Math.random() * 3 + 1;
+  const x = Math.random() * 100;
+  const duration = Math.random() * 8 + 6;
+  const drift = (Math.random() - 0.5) * 100;
+  const hue = Math.random() > 0.5 ? '20' : '30';
+  p.style.cssText = `
+    left:${x}%;width:${size}px;height:${size}px;
+    background:hsla(${hue},90%,60%,0.8);
+    animation-duration:${duration}s;
+    --drift:${drift}px;
+  `;
+  particlesEl.appendChild(p);
+  setTimeout(() => p.remove(), duration * 1000);
+}
+setInterval(createParticle, 400);
+
+// ─── TERMINAL TYPING ANIMATION ───
+const terminalLines = [
+  { text: '$ ', cls: 't-prompt', delay: 0 },
+  { text: 'npx git-vision', cls: 't-cmd', delay: 0, sameLine: true },
+  { text: '', delay: 600 },
+  { text: '╭──────────────────────────────────────────────╮', cls: 't-dim', delay: 800 },
+  { text: '│ git-vision  Repository Health Report         │', cls: 't-orange t-bold', delay: 100 },
+  { text: '╰──────────────────────────────────────────────╯', cls: 't-dim', delay: 100 },
+  { text: '', delay: 200 },
+  { text: '  HEALTH SCORE', cls: 't-bold', delay: 300 },
+  { text: '  78/100  B — Good', cls: 't-green t-bold', delay: 200 },
+  { text: '', delay: 100 },
+  { text: '  ████████░░  Hotspots     82/100', cls: 't-green', delay: 150 },
+  { text: '  ██████░░░░  Bus Factor   65/100', cls: 't-yellow', delay: 150 },
+  { text: '  █████████░  Coupling     91/100', cls: 't-green', delay: 150 },
+  { text: '  ███████░░░  Code Age     70/100', cls: 't-cyan', delay: 150 },
+  { text: '  ████████░░  Team         88/100', cls: 't-purple', delay: 150 },
+  { text: '', delay: 200 },
+  { text: '  !! src/api/payments.ts is your #1 hotspot', cls: 't-red', delay: 300 },
+  { text: '  !! 12 files have a bus factor of 1', cls: 't-yellow', delay: 200 },
+  { text: '   i Consider splitting auth.middleware.ts', cls: 't-dim', delay: 200 },
+];
+
+const termBody = document.getElementById('terminal-body');
+let lineIndex = 0;
+let totalDelay = 1200; // initial delay
+
+terminalLines.forEach((line, i) => {
+  totalDelay += line.delay;
+  setTimeout(() => {
+    if (line.text === '') {
+      termBody.appendChild(document.createElement('br'));
+      return;
+    }
+    const span = document.createElement('span');
+    span.className = `t-line ${line.cls || ''}`;
+    span.textContent = line.text;
+    span.style.animationDelay = '0s';
+    span.style.animation = 'typeLine 0.3s ease both';
+    if (line.sameLine) {
+      const last = termBody.lastElementChild;
+      if (last) { last.textContent += line.text; return; }
+    }
+    termBody.appendChild(span);
+    // Auto scroll
+    termBody.scrollTop = termBody.scrollHeight;
+  }, totalDelay);
+});
+
+// ─── COPY INSTALL ───
+function copyInstall() {
+  navigator.clipboard.writeText('npx git-vision');
+  const hint = document.getElementById('install-hint');
+  hint.textContent = 'Copied!';
+  hint.style.color = 'var(--green)';
+  setTimeout(() => { hint.textContent = 'Click to copy'; hint.style.color = ''; }, 2000);
+}
+
+// ─── SCROLL REVEAL ───
+const observer = new IntersectionObserver((entries) => {
+  entries.forEach(e => { if (e.isIntersecting) e.target.classList.add('visible'); });
+}, { threshold: 0.1 });
+document.querySelectorAll('.reveal').forEach(el => observer.observe(el));
+
+// ─── FEATURE CARD MOUSE GLOW ───
+document.querySelectorAll('.feature-card').forEach(card => {
+  card.addEventListener('mousemove', (e) => {
+    const rect = card.getBoundingClientRect();
+    card.style.setProperty('--mx', ((e.clientX - rect.left) / rect.width * 100) + '%');
+    card.style.setProperty('--my', ((e.clientY - rect.top) / rect.height * 100) + '%');
+  });
+});
+
+// ─── SCORE COUNTER ANIMATION ───
+let scoreAnimated = false;
+const scoreObserver = new IntersectionObserver((entries) => {
+  entries.forEach(e => {
+    if (e.isIntersecting && !scoreAnimated) {
+      scoreAnimated = true;
+      animateScore();
+      // Animate bars
+      document.querySelectorAll('.score-bar-fill').forEach(bar => {
+        setTimeout(() => { bar.style.width = bar.dataset.width; }, 300);
+      });
+    }
+  });
+}, { threshold: 0.3 });
+scoreObserver.observe(document.getElementById('score-card'));
+
+function animateScore() {
+  const el = document.getElementById('score-num');
+  let current = 0;
+  const target = 78;
+  const duration = 1500;
+  const start = performance.now();
+  function step(now) {
+    const progress = Math.min((now - start) / duration, 1);
+    const eased = 1 - Math.pow(1 - progress, 3);
+    current = Math.round(eased * target);
+    el.textContent = current;
+    if (progress < 1) requestAnimationFrame(step);
+  }
+  requestAnimationFrame(step);
+}
+
+// ─── 3D TILT ON SCORE CARD ───
+const scoreCard = document.getElementById('score-card');
+scoreCard.addEventListener('mousemove', (e) => {
+  const rect = scoreCard.getBoundingClientRect();
+  const x = (e.clientX - rect.left) / rect.width - 0.5;
+  const y = (e.clientY - rect.top) / rect.height - 0.5;
+  scoreCard.style.transform = `rotateY(${x * 10}deg) rotateX(${-y * 10}deg)`;
+});
+scoreCard.addEventListener('mouseleave', () => {
+  scoreCard.style.transform = 'rotateY(0) rotateX(0)';
+});
+
+// ─── TYPING LINE ANIMATION ───
+const style = document.createElement('style');
+style.textContent = `@keyframes typeLine{0%{opacity:0;transform:translateX(-8px)}100%{opacity:1;transform:translateX(0)}}`;
+document.head.appendChild(style);
+</script>
+</body>
+</html>
