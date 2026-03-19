@@ -94,7 +94,7 @@ export function generateConfig(repoPath) {
   const isMonorepo = checkMonorepo(repoPath);
 
   const config = {
-    $schema: "https://raw.githubusercontent.com/git-vision/git-vision/main/schema.json",
+    $schema: "https://raw.githubusercontent.com/LittleBoy9/git-vision/main/schema.json",
     format: "terminal",
     top: 10,
     ignore: [...ignoreSet],

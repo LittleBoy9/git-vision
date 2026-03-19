@@ -16,6 +16,7 @@ export async function analyzeBlame(git, filePaths, options = {}) {
 
   const results = [];
   const globalOwnership = new Map(); // author -> { lines, files }
+  let failedFiles = 0;
 
   for (let i = 0; i < filesToBlame.length; i++) {
     const filePath = filesToBlame[i];
@@ -41,6 +42,7 @@ export async function analyzeBlame(git, filePaths, options = {}) {
       }
     } catch {
       // Skip files that can't be blamed (binary, deleted, etc.)
+      failedFiles++;
       continue;
     }
   }
@@ -97,6 +99,7 @@ export async function analyzeBlame(git, filePaths, options = {}) {
     total: fileOwnership.length,
     stats: {
       filesAnalyzed: fileOwnership.length,
+      failedFiles,
       totalLines,
       uniqueAuthors: globalOwnership.size,
       singleOwnerFiles: fileOwnership.filter(

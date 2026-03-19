@@ -3,6 +3,10 @@
 import { program } from "commander";
 import ora from "ora";
 import chalk from "chalk";
+import { simpleGit } from "simple-git";
+import { mkdtempSync, rmSync } from "fs";
+import { join } from "path";
+import { tmpdir } from "os";
 import { analyze, formatReport } from "../src/index.js";
 import { writeConfig } from "../src/config/init.js";
 
@@ -94,6 +98,14 @@ program
     await runAnalysis("monorepo", opts);
   });
 
+// Branch graph command
+program
+  .command("branches")
+  .description("Branch topology, merge history, stale branches, and lifecycle analysis")
+  .action(async () => {
+    await runAnalysis("branches", program.opts());
+  });
+
 // NEW: diff command
 program
   .command("diff [target]")
@@ -102,6 +114,73 @@ program
     const opts = program.opts();
     opts.diffTarget = target || "main";
     await runAnalysis("diff", opts);
+  });
+
+// Remote repo analysis
+program
+  .command("remote <url> [module]")
+  .description("Analyze any remote git repo without cloning it yourself")
+  .action(async (url, module) => {
+    const opts = program.opts();
+    const spinner = ora({
+      text: chalk.dim("Cloning repository..."),
+      color: "cyan",
+    }).start();
+
+    let tempDir;
+    try {
+      // Normalize GitHub shorthand: user/repo -> full URL
+      const repoUrl = url.includes("://") || url.includes("@")
+        ? url
+        : `https://github.com/${url}.git`;
+
+      // Create temp directory
+      tempDir = mkdtempSync(join(tmpdir(), "git-vision-"));
+
+      // Blobless clone — full commit history, blobs fetched on demand
+      const git = simpleGit();
+      spinner.text = chalk.dim(`Cloning ${repoUrl}...`);
+      await git.clone(repoUrl, tempDir, ["--filter=blob:none"]);
+
+      spinner.text = chalk.dim("Analyzing...");
+
+      // Build analysis options
+      const analysisOpts = {
+        module: module || null,
+        format: opts.format,
+        top: opts.top,
+        since: opts.since,
+        ignore: opts.ignore,
+        repoPath: tempDir,
+        blame: opts.blame ? { enabled: true } : undefined,
+        compare: opts.compare,
+        monorepo: opts.workspace
+          ? { enabled: true, workspaces: typeof opts.workspace === "string" ? [opts.workspace] : [] }
+          : undefined,
+      };
+
+      if (analysisOpts.blame?.enabled) {
+        analysisOpts.onBlameProgress = ({ current, total, file }) => {
+          spinner.text = chalk.dim(`Running git blame... ${current}/${total} — ${file}`);
+        };
+      }
+
+      const report = await analyze(analysisOpts);
+      const output = await formatReport(report, opts.format);
+
+      spinner.stop();
+      console.log("");
+      console.log(chalk.dim(`  Remote: ${repoUrl}`));
+      console.log(output);
+    } catch (err) {
+      spinner.fail(chalk.red(err.message));
+      process.exit(1);
+    } finally {
+      // Clean up temp directory
+      if (tempDir) {
+        try { rmSync(tempDir, { recursive: true, force: true }); } catch {}
+      }
+    }
   });
 
 // NEW: init command

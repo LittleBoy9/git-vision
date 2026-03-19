@@ -19,7 +19,13 @@ import { analyzeBusFactor } from "./busFactor.js";
 
 export async function analyzeTrends(git, getFileLOC, options = {}) {
   const periodStr = options.compare || "3months";
-  const { recentSince, olderSince, olderUntil, periodLabel } = parsePeriod(periodStr);
+  let parsed;
+  try {
+    parsed = parsePeriod(periodStr);
+  } catch (err) {
+    throw new Error(`Invalid --compare value: "${periodStr}". Expected format like "3months", "6weeks", "1year".`);
+  }
+  const { recentSince, olderSince, olderUntil, periodLabel } = parsed;
 
   // Get commits for both periods
   const [recentCommits, olderCommits] = await Promise.all([

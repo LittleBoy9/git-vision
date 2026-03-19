@@ -32,7 +32,8 @@ git-vision/
 │   │   ├── blame.js            # V2: Line-level ownership via git blame
 │   │   ├── trends.js           # V2: Period comparison & trend tracking
 │   │   ├── monorepo.js         # V2: Per-workspace analysis
-│   │   └── diff.js             # PR/branch risk analysis
+│   │   ├── diff.js             # PR/branch risk analysis
+│   │   └── branches.js         # Branch graph & lifecycle analysis
 │   ├── scoring/
 │   │   └── healthScore.js      # Repo health 0-100 + recommendations
 │   └── formatters/
@@ -130,7 +131,18 @@ npm test             # Run tests (when added)
 - CLI flags override everything
 - Configurable thresholds for all analyzers
 
-#### 11. Treemap Visualization (formatters/treemap.js)
+#### 11. Branch Graph (branches.js)
+- Branch topology: who created each branch, when, lifespan
+- Merge graph: visual merge history extracted from merge commits
+- Stale branch detection (>90 days inactive, not merged)
+- Branch creators leaderboard
+- Supports local + remote branches via `git for-each-ref`
+- `branches` subcommand
+- **Graph Layout Engine**: `getCommitTopology()` fetches commits with parent hashes in topo order, `computeGraphLayout()` assigns lanes (columns) and computes connections (merge-in, branch-out, converge) for rendering
+- **Terminal rendering**: Lane-based coloring with `●` nodes, `│` lines, `╱`/`╲` diagonals, colored ref badges
+- **HTML rendering**: SVG-based graph with bezier curves, glowing nodes, per-lane colors — GitLens-style visualization
+
+#### 12. Treemap Visualization (formatters/treemap.js)
 - Squarified treemap algorithm (pure JS, no deps)
 - Rectangle size = LOC, color = risk score
 - Canvas-based with hover tooltips
@@ -150,7 +162,7 @@ npm test             # Run tests (when added)
 - `--blame` — enable git blame analysis (V2)
 - `--compare <period>` — compare time periods (V2)
 - `--workspace [path]` — enable monorepo mode (V2)
-- Subcommands: hotspots, coupling, bus-factor, age, contributors, blame, trends, monorepo, diff, init
+- Subcommands: hotspots, coupling, bus-factor, age, contributors, blame, trends, monorepo, branches, diff, remote, init
 
 ## Smart Defaults
 - Auto-filters lock files, binaries, generated code, node_modules, dist, etc.
@@ -169,11 +181,34 @@ npm test             # Run tests (when added)
 - Supports: Node.js, Next.js, Python, Go, Rust, Java, Ruby, PHP
 - Auto-detects monorepo (workspaces, pnpm, lerna)
 
+## Remote Analysis
+- `git-vision remote <url> [module]` — analyze any remote repo without manual cloning
+- Supports GitHub shorthand: `git-vision remote expressjs/express branches`
+- Full URLs: `git-vision remote https://github.com/facebook/react.git`
+- Uses blobless clone (`--filter=blob:none`) for fast download
+- Auto-cleans temp directory after analysis
+- All flags work: `--format`, `--top`, `--since`, `--blame`, etc.
+
 ## Future Plans (V3+)
-- [ ] AI-powered summary (LLM explains repo health in plain English)
-- [ ] GitHub Action (run on every PR, comment with risk analysis)
-- [ ] Interactive terminal mode (drill into files/authors)
-- [ ] Benchmark mode (compare two branches)
+
+### High Priority (Adoption Drivers)
+- [ ] **GitHub Action** — run on every PR, auto-comment with risk score + recommendations, exit code 1 on critical risk
+- [ ] **AI-powered summary** — LLM explains repo health in plain English (Claude API integration)
+- [ ] **Author Knowledge Loss Detection** — flag modules where key authors stopped contributing (enhances bus factor with time dimension)
+
+### Medium Priority (Feature Parity + Differentiation)
+- [ ] **Author Activity Timeline** — commits/lines per author over time, shows ramp-up/departure patterns
+- [ ] **Code Survival Analysis** — what % of original code still exists per module/author (like git-of-theseus)
+- [ ] **Burndown/Velocity Chart** — lines added/removed over time in HTML report
+- [ ] **Temporal Coupling** — are coupled files STILL changing together or just historically linked
+- [ ] **Author Co-authorship Matrix** — who works with whom, reveals team structure/silos
+- [ ] **Interactive TUI** — terminal UI to drill into hotspots, owners, commits (blessed/ink)
 - [ ] Export to CSV/PDF
+
+### Lower Priority (Nice to Have)
+- [ ] Benchmark mode (compare two branches)
 - [ ] Watch mode (re-run on new commits)
 - [ ] Custom scoring weights via config
+- [ ] Collaboration graph (force-directed author network visualization)
+- [ ] Blame heatmap visualization in HTML report
+- [ ] Regex-based file grouping for non-monorepo projects

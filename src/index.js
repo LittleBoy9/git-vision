@@ -8,6 +8,7 @@ import { analyzeBlame } from "./analyzers/blame.js";
 import { analyzeTrends } from "./analyzers/trends.js";
 import { analyzeMonorepo } from "./analyzers/monorepo.js";
 import { analyzeDiff } from "./analyzers/diff.js";
+import { analyzeBranches } from "./analyzers/branches.js";
 import { calculateHealthScore } from "./scoring/healthScore.js";
 import { loadConfig, mergeConfig } from "./config/loader.js";
 import { formatTerminal } from "./formatters/terminal.js";
@@ -40,6 +41,13 @@ export async function analyze(cliOpts = {}) {
       target: options.diffTarget,
       ignore: options.ignore,
     });
+    return report;
+  }
+
+  // --- Branch graph mode (separate flow, no commit parsing needed) ---
+  if (options.module === "branches") {
+    const report = { repoStats };
+    report.branches = await analyzeBranches(parser.git, { top: options.top });
     return report;
   }
 

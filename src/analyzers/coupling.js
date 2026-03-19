@@ -45,7 +45,10 @@ export function analyzeCoupling(commits, options = {}) {
 
     if (maxTotal === 0) continue;
 
-    const degree = sharedCommits / Math.min(totalA, totalB);
+    const minTotal = Math.min(totalA, totalB);
+    if (minTotal === 0) continue;
+
+    const degree = sharedCommits / minTotal;
 
     if (degree < minCouplingDegree) continue;
 

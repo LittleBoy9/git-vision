@@ -10,7 +10,7 @@ import { generateTreemapHTML } from "./treemap.js";
 
 export function formatHTML(report) {
   const treemapSection = report.hotspots ? generateTreemapHTML(report.hotspots) : "";
-  const data = JSON.stringify(report, null, 2);
+  const data = JSON.stringify(report, null, 2).replace(/<\//g, '<\\/');
 
   return `<!DOCTYPE html>
 <html lang="en">
@@ -137,6 +137,63 @@ export function formatHTML(report) {
     }
     .coupling-arrow { color: #58a6ff; }
     .coupling-degree { font-weight: 600; }
+    .branch-graph-container {
+      background: #161b22;
+      border: 1px solid #30363d;
+      border-radius: 12px;
+      padding: 1.5rem;
+      overflow-x: auto;
+      margin: 1rem 0;
+    }
+    .graph-row {
+      display: flex;
+      align-items: center;
+      font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', monospace;
+      font-size: 0.82rem;
+    }
+    .graph-visual { white-space: pre; min-width: 80px; flex-shrink: 0; }
+    .graph-hash { color: #d29922; margin-right: 8px; flex-shrink: 0; }
+    .graph-refs { margin-right: 8px; flex-shrink: 0; }
+    .graph-ref {
+      display: inline-block;
+      padding: 1px 6px;
+      border-radius: 8px;
+      font-size: 0.72rem;
+      font-weight: 600;
+      margin-right: 4px;
+    }
+    .graph-ref-head { background: #3fb95033; color: #3fb950; border: 1px solid #3fb95055; }
+    .graph-ref-remote { background: #f8514933; color: #f85149; border: 1px solid #f8514955; }
+    .graph-ref-tag { background: #d2992233; color: #d29922; border: 1px solid #d2992255; }
+    .graph-ref-branch { background: #58a6ff33; color: #58a6ff; border: 1px solid #58a6ff55; }
+    .graph-subject { color: #c9d1d9; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .graph-subject.merge { color: #8b949e; font-style: italic; }
+    .graph-author { color: #8b949e; margin-left: 12px; font-size: 0.75rem; flex-shrink: 0; }
+    .graph-svg-container {
+      display: flex;
+      position: relative;
+      overflow-x: auto;
+      gap: 12px;
+    }
+    .graph-svg-container svg { flex-shrink: 0; }
+    .graph-info-column { flex: 1; min-width: 0; padding-top: 0; }
+    .branch-stats {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+      gap: 0.8rem;
+      margin: 1rem 0;
+    }
+    .branch-stat {
+      background: #0d1117;
+      border-radius: 8px;
+      padding: 0.8rem;
+      text-align: center;
+    }
+    .branch-stat-value { font-size: 1.4rem; font-weight: 700; color: #58a6ff; }
+    .branch-stat-label { font-size: 0.75rem; color: #8b949e; text-transform: uppercase; margin-top: 0.2rem; }
+    .stale-badge { background: #d2992222; color: #d29922; padding: 2px 8px; border-radius: 12px; font-size: 0.72rem; }
+    .active-badge { background: #3fb95022; color: #3fb950; padding: 2px 8px; border-radius: 12px; font-size: 0.72rem; }
+    .merged-badge { background: #8b949e22; color: #8b949e; padding: 2px 8px; border-radius: 12px; font-size: 0.72rem; }
   </style>
 </head>
 <body>
@@ -153,6 +210,7 @@ export function formatHTML(report) {
   <div id="blame-section"></div>
   <div id="trends-section"></div>
   <div id="monorepo-section"></div>
+  <div id="branches-section"></div>
   <div id="recommendations-section"></div>
 
   <div class="footer">
@@ -328,6 +386,200 @@ export function formatHTML(report) {
         '<h2>Monorepo Analysis</h2>' +
         '<table><tr><th>Workspace</th><th>Score</th><th>Grade</th><th>Activity</th></tr>' +
         rows + '</table>';
+    }
+    // Branches
+    if (report.branches) {
+      const b = report.branches;
+      const s = b.stats;
+      let html = '<h2>Branch Graph</h2>';
+
+      // Stats row
+      html += '<div class="branch-stats">' +
+        '<div class="branch-stat"><div class="branch-stat-value">' + s.totalBranches + '</div><div class="branch-stat-label">Total</div></div>' +
+        '<div class="branch-stat"><div class="branch-stat-value" style="color:#3fb950">' + s.activeBranches + '</div><div class="branch-stat-label">Active</div></div>' +
+        '<div class="branch-stat"><div class="branch-stat-value" style="color:#d29922">' + s.staleBranches + '</div><div class="branch-stat-label">Stale</div></div>' +
+        '<div class="branch-stat"><div class="branch-stat-value" style="color:#8b949e">' + s.mergedBranches + '</div><div class="branch-stat-label">Merged</div></div>' +
+        '<div class="branch-stat"><div class="branch-stat-value" style="color:#d2a8ff">' + s.totalMerges + '</div><div class="branch-stat-label">Merges</div></div>' +
+        '</div>';
+
+      // Visual graph — SVG-based GitLens-style rendering
+      if (b.graphLayout && b.graphLayout.rows && b.graphLayout.rows.length) {
+        const layout = b.graphLayout;
+        const CELL_W = 28;
+        const ROW_H = 38;
+        const NODE_R = 6;
+        const GLOW_R = 12;
+        const colors = ['#4EC9B0','#C586C0','#CE9178','#569CD6','#DCDCAA','#D16969','#B5CEA8','#9CDCFE'];
+        const getColor = (lane) => colors[lane % colors.length];
+
+        const svgW = layout.maxLanes * CELL_W + CELL_W;
+        const svgH = layout.rows.length * ROW_H;
+        let svg = '';
+
+        // Draw lane lines and connections (behind nodes)
+        for (let i = 0; i < layout.rows.length; i++) {
+          const row = layout.rows[i];
+          const cy = i * ROW_H + ROW_H / 2;
+
+          // Active pass-through lane lines
+          for (const lane of row.activeLanes) {
+            const cx = lane * CELL_W + CELL_W / 2;
+            svg += '<line x1="'+cx+'" y1="'+(cy - ROW_H/2)+'" x2="'+cx+'" y2="'+(cy + ROW_H/2)+'" stroke="'+getColor(lane)+'" stroke-width="2.5" opacity="0.7"/>';
+          }
+
+          // Commit's own lane — line above
+          const mx = row.lane * CELL_W + CELL_W / 2;
+          if (i > 0) {
+            svg += '<line x1="'+mx+'" y1="'+(cy - ROW_H/2)+'" x2="'+mx+'" y2="'+cy+'" stroke="'+getColor(row.lane)+'" stroke-width="2.5"/>';
+          }
+          // Line below (if lane continues)
+          if (row.activeLanes.includes(row.lane) || i < layout.rows.length - 1) {
+            svg += '<line x1="'+mx+'" y1="'+cy+'" x2="'+mx+'" y2="'+(cy + ROW_H/2)+'" stroke="'+getColor(row.lane)+'" stroke-width="2.5"/>';
+          }
+
+          // Branch/merge curves (bezier paths)
+          for (const conn of row.connections) {
+            const fromX = conn.fromLane * CELL_W + CELL_W / 2;
+            const toX = conn.toLane * CELL_W + CELL_W / 2;
+
+            if (conn.type === 'merge-in') {
+              // Curve from fromLane above into commit
+              const color = getColor(conn.fromLane);
+              const startY = cy - ROW_H / 2;
+              const endY = cy;
+              const cp1y = startY + ROW_H * 0.4;
+              const cp2y = endY - ROW_H * 0.2;
+              svg += '<path d="M '+fromX+' '+startY+' C '+fromX+' '+cp1y+', '+toX+' '+cp2y+', '+toX+' '+endY+'" stroke="'+color+'" stroke-width="2.5" fill="none" opacity="0.9"/>';
+            } else if (conn.type === 'converge') {
+              // Lane converges into another lane below (first parent on different lane)
+              const color = getColor(conn.fromLane);
+              const startY = cy;
+              const endY = cy + ROW_H / 2;
+              const cp1y = startY + ROW_H * 0.3;
+              const cp2y = endY - ROW_H * 0.3;
+              svg += '<path d="M '+fromX+' '+startY+' C '+fromX+' '+cp1y+', '+toX+' '+cp2y+', '+toX+' '+endY+'" stroke="'+color+'" stroke-width="2.5" fill="none" opacity="0.9"/>';
+            } else {
+              // Branch-out: curve from commit down to new lane
+              const color = getColor(conn.toLane);
+              const startY = cy;
+              const endY = cy + ROW_H / 2;
+              const cp1y = startY + ROW_H * 0.2;
+              const cp2y = endY - ROW_H * 0.4;
+              svg += '<path d="M '+fromX+' '+startY+' C '+fromX+' '+cp1y+', '+toX+' '+cp2y+', '+toX+' '+endY+'" stroke="'+color+'" stroke-width="2.5" fill="none" opacity="0.9"/>';
+            }
+          }
+        }
+
+        // Draw nodes on top
+        for (let i = 0; i < layout.rows.length; i++) {
+          const row = layout.rows[i];
+          const cx = row.lane * CELL_W + CELL_W / 2;
+          const cy = i * ROW_H + ROW_H / 2;
+          const color = getColor(row.lane);
+          // Outer glow
+          svg += '<circle cx="'+cx+'" cy="'+cy+'" r="'+GLOW_R+'" fill="'+color+'" opacity="0.2"/>';
+          // Mid glow
+          svg += '<circle cx="'+cx+'" cy="'+cy+'" r="'+(NODE_R+2)+'" fill="'+color+'" opacity="0.35"/>';
+          // Node
+          svg += '<circle cx="'+cx+'" cy="'+cy+'" r="'+NODE_R+'" fill="'+color+'"/>';
+          // Inner highlight (gives depth)
+          svg += '<circle cx="'+(cx-1.5)+'" cy="'+(cy-1.5)+'" r="2.5" fill="white" opacity="0.35"/>';
+        }
+
+        // Build layout: SVG on left, commit info on right
+        html += '<div class="branch-graph-container graph-svg-container">';
+        html += '<svg width="'+svgW+'" height="'+svgH+'" xmlns="http://www.w3.org/2000/svg" style="flex-shrink:0">' + svg + '</svg>';
+        html += '<div class="graph-info-column">';
+
+        for (let i = 0; i < layout.rows.length; i++) {
+          const row = layout.rows[i];
+          let refHtml = '';
+          if (row.refs && row.refs.length) {
+            for (const r of row.refs) {
+              const escaped = (r || '').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+              if (r.startsWith('HEAD ->')) {
+                refHtml += '<span class="graph-ref graph-ref-head">' + escaped + '</span>';
+              } else if (r.startsWith('tag:')) {
+                refHtml += '<span class="graph-ref graph-ref-tag">' + escaped + '</span>';
+              } else if (r.startsWith('origin/')) {
+                refHtml += '<span class="graph-ref graph-ref-remote">' + escaped + '</span>';
+              } else {
+                refHtml += '<span class="graph-ref graph-ref-branch">' + escaped + '</span>';
+              }
+            }
+          }
+          const subClass = row.isMerge ? 'graph-subject merge' : 'graph-subject';
+          const sub = (row.subject || '').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+          const author = (row.author || '').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+          html += '<div class="graph-row" style="height:'+ROW_H+'px">' +
+            '<span class="graph-hash">' + row.hash + '</span>' +
+            (refHtml ? '<span class="graph-refs">' + refHtml + '</span>' : '') +
+            '<span class="' + subClass + '" style="flex:1;min-width:0">' + sub + '</span>' +
+            '<span class="graph-author">' + author + '</span>' +
+            '</div>';
+        }
+
+        html += '</div></div>';
+      } else if (b.graphLines && b.graphLines.length) {
+        // Fallback: text-based graph for older data without layout
+        html += '<div class="branch-graph-container"><pre style="color:#c9d1d9;font-size:0.82rem;margin:0">';
+        for (const entry of b.graphLines) {
+          const g = (entry.graph || '').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+          const sub = (entry.subject || '').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+          if (entry.hash) {
+            html += g + ' <span style="color:#d29922">' + entry.hash + '</span> ' + sub + '\\n';
+          } else {
+            html += g + '\\n';
+          }
+        }
+        html += '</pre></div>';
+      }
+
+      // Branch list table
+      if (b.branches && b.branches.length) {
+        html += '<h3 style="color:#c9d1d9;font-size:1rem;margin:1.5rem 0 0.5rem">All Branches</h3>';
+        const rows = b.branches.map(br => {
+          const badge = br.isMerged ? '<span class="merged-badge">merged</span>' :
+            (b.staleBranches && b.staleBranches.some(s => s.name === br.name))
+              ? '<span class="stale-badge">stale</span>'
+              : '<span class="active-badge">active</span>';
+          const isCurrent = br.name === b.currentBranch;
+          const name = isCurrent ? '<strong style="color:#3fb950">* ' + br.name + '</strong>' : br.name;
+          const age = br.createdAt ? formatAgeHTML(new Date(br.createdAt)) : '—';
+          const lastAct = br.lastActivity ? formatAgeHTML(new Date(br.lastActivity)) : '—';
+          return '<tr><td>' + name + '</td><td>' + (br.creator || '—') + '</td>' +
+            '<td>' + age + '</td><td>' + lastAct + '</td>' +
+            '<td>' + (br.aheadCount > 0 ? '+' + br.aheadCount : '0') + '</td>' +
+            '<td>' + badge + '</td></tr>';
+        }).join('');
+        html += '<table><tr><th>Branch</th><th>Creator</th><th>Created</th><th>Last Activity</th><th>Ahead</th><th>Status</th></tr>' + rows + '</table>';
+      }
+
+      // Merge history
+      if (b.mergeGraph && b.mergeGraph.length) {
+        html += '<h3 style="color:#c9d1d9;font-size:1rem;margin:1.5rem 0 0.5rem">Merge History</h3>';
+        const rows = b.mergeGraph.slice(0, 15).map(m => {
+          const dateStr = m.date ? formatAgeHTML(new Date(m.date)) : '—';
+          return '<tr><td style="color:#58a6ff">' + (m.source || '?') + '</td>' +
+            '<td style="color:#8b949e">&rarr;</td>' +
+            '<td>' + (m.target || b.currentBranch) + '</td>' +
+            '<td>' + (m.author || '—') + '</td>' +
+            '<td style="color:#8b949e">' + dateStr + '</td></tr>';
+        }).join('');
+        html += '<table><tr><th>Source</th><th></th><th>Target</th><th>Author</th><th>When</th></tr>' + rows + '</table>';
+      }
+
+      document.getElementById('branches-section').innerHTML = html;
+    }
+
+    function formatAgeHTML(date) {
+      if (!date) return '—';
+      const days = Math.floor((Date.now() - date.getTime()) / 86400000);
+      if (days === 0) return 'today';
+      if (days === 1) return '1d ago';
+      if (days < 30) return days + 'd ago';
+      if (days < 365) return Math.floor(days / 30) + 'mo ago';
+      return Math.floor(days / 365) + 'y ago';
     }
   </script>
 </body>

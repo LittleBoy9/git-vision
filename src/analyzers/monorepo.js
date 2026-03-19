@@ -80,7 +80,6 @@ export function detectWorkspaces(repoPath) {
  * Resolve glob patterns to actual workspace directories.
  */
 function resolveGlobPatterns(repoPath, patterns) {
-  const { readdirSync, statSync } = await_import_fs();
   const workspaces = [];
 
   for (const pattern of patterns) {
@@ -128,11 +127,6 @@ function resolveGlobPatterns(repoPath, patterns) {
   }
 
   return workspaces;
-}
-
-// Safe wrappers to avoid import issues
-function await_import_fs() {
-  return { readdirSync, statSync: statSync_safe };
 }
 
 import { readdirSync as readdirSync_safe_import, statSync as statSync_import } from "fs";

@@ -70,6 +70,11 @@ export function formatTerminal(report) {
     lines.push("");
   }
 
+  if (report.branches) {
+    lines.push(renderBranches(report.branches));
+    lines.push("");
+  }
+
   if (report.healthScore && report.healthScore.recommendations.length > 0) {
     lines.push(renderRecommendations(report.healthScore.recommendations));
     lines.push("");
@@ -557,6 +562,354 @@ function renderMonorepo(monorepo) {
 
   lines.push(table.toString());
   return lines.join("\n");
+}
+
+// ─── Branch Graph Renderer ──────────────────────────────────
+
+function renderBranches(branches) {
+  const lines = [sectionTitle("BRANCH GRAPH", "link")];
+
+  lines.push(chalk.dim(
+    `  ${branches.stats.totalBranches} branches · ${branches.stats.mergedBranches} merged · ${branches.stats.staleBranches} stale · ${branches.stats.totalMerges} merges`
+  ));
+  lines.push("");
+
+  // Visual graph (prefer computed layout, fall back to raw graphLines)
+  if (branches.graphLayout && branches.graphLayout.rows.length > 0) {
+    lines.push(renderVisualGraph(branches.graphLayout));
+    lines.push("");
+  } else if (branches.graphLines && branches.graphLines.length > 0) {
+    lines.push(renderVisualGraphLegacy(branches.graphLines));
+    lines.push("");
+  }
+
+  // Branch creators
+  if (branches.creators.length > 0) {
+    lines.push(chalk.bold("  Branch Creators:"));
+    for (const c of branches.creators.slice(0, 5)) {
+      const activeTag = c.active > 0 ? chalk.green(`${c.active} active`) : "";
+      const mergedTag = c.merged > 0 ? chalk.dim(`${c.merged} merged`) : "";
+      const staleTag = c.stale > 0 ? chalk.yellow(`${c.stale} stale`) : "";
+      const tags = [activeTag, mergedTag, staleTag].filter(Boolean).join(chalk.dim(" · "));
+      lines.push(
+        `  ${chalk.white(truncate(c.author, 25))}  ${chalk.cyan(c.created)} branches  ${tags}`
+      );
+    }
+    lines.push("");
+  }
+
+  // Active branches
+  if (branches.activeBranches.length > 0) {
+    lines.push(chalk.green.bold("  Active Branches:"));
+    const table = new Table({
+      head: ["Branch", "Creator", "Age", "Ahead", "Last Activity"].map((h) => chalk.dim(h)),
+      chars: tableChars(),
+      style: { head: [], border: ["dim"] },
+      colWidths: [30, 18, 10, 8, 20],
+    });
+
+    for (const b of branches.activeBranches.slice(0, 10)) {
+      const isCurrent = b.name === branches.currentBranch;
+      const nameStr = isCurrent
+        ? chalk.green.bold("* " + truncate(b.name, 26))
+        : chalk.white(truncate(b.name, 28));
+
+      table.push([
+        nameStr,
+        chalk.dim(truncate(b.creator || "—", 16)),
+        chalk.dim(formatAge(b.createdAt)),
+        b.aheadCount > 0 ? chalk.cyan("+" + b.aheadCount) : chalk.dim("0"),
+        chalk.dim(formatAge(b.lastActivity)),
+      ]);
+    }
+    lines.push(table.toString());
+    lines.push("");
+  }
+
+  // Stale branches
+  if (branches.staleBranches.length > 0) {
+    lines.push(chalk.yellow.bold("  Stale Branches (>90 days inactive):"));
+    const table = new Table({
+      head: ["Branch", "Creator", "Last Activity", "Age", "Status"].map((h) => chalk.dim(h)),
+      chars: tableChars(),
+      style: { head: [], border: ["dim"] },
+      colWidths: [30, 18, 18, 10, 12],
+    });
+
+    for (const b of branches.staleBranches.slice(0, 10)) {
+      table.push([
+        chalk.yellow(truncate(b.name, 28)),
+        chalk.dim(truncate(b.creator || "—", 16)),
+        chalk.dim(formatAge(b.lastActivity)),
+        chalk.dim(b.lifespan ? b.lifespan + "d" : "—"),
+        chalk.yellow("stale"),
+      ]);
+    }
+    lines.push(table.toString());
+    lines.push("");
+  }
+
+  // Merge graph (recent merges)
+  if (branches.mergeGraph.length > 0) {
+    lines.push(chalk.bold("  Recent Merges:"));
+    for (const m of branches.mergeGraph.slice(0, 10)) {
+      const source = m.source || "?";
+      const target = m.target || branches.currentBranch;
+      const dateStr = m.date ? formatAge(m.date) : "";
+      lines.push(
+        `  ${chalk.cyan(truncate(source, 25))} ${chalk.dim("->")} ${chalk.white(truncate(target, 20))}  ${chalk.dim(dateStr)}  ${chalk.dim(truncate(m.author || "", 15))}`
+      );
+    }
+    lines.push("");
+  }
+
+  return lines.join("\n");
+}
+
+/**
+ * Render graph from computed layout data (topology-based, GitLens-style).
+ * Each branch gets a consistent lane color. Nodes are ● with proper connections.
+ */
+function renderVisualGraph(graphLayout) {
+  const { rows, maxLanes } = graphLayout;
+  if (!rows || rows.length === 0) return "";
+
+  const lines = [chalk.bold("  Visual Graph:")];
+  lines.push("");
+
+  const COLORS = [
+    chalk.hex("#4EC9B0"), // teal
+    chalk.hex("#C586C0"), // purple
+    chalk.hex("#CE9178"), // orange
+    chalk.hex("#569CD6"), // blue
+    chalk.hex("#DCDCAA"), // yellow
+    chalk.hex("#D16969"), // red
+    chalk.hex("#B5CEA8"), // green
+    chalk.hex("#9CDCFE"), // light blue
+  ];
+  const getColor = (lane) => COLORS[lane % COLORS.length];
+
+  for (let ri = 0; ri < rows.length; ri++) {
+    const row = rows[ri];
+
+    // === Connection row above commit (merge-in lines) ===
+    if (row.connections.some((c) => c.type === "merge-in")) {
+      const cells = new Array(maxLanes * 2).fill(" ");
+
+      // Pass-through lanes
+      for (const lane of row.activeLanes) {
+        cells[lane * 2] = { ch: "│", color: getColor(lane) };
+      }
+      // Commit's own lane continues
+      cells[row.lane * 2] = { ch: "│", color: getColor(row.lane) };
+
+      for (const conn of row.connections) {
+        if (conn.type !== "merge-in") continue;
+        const from = conn.fromLane;
+        const to = conn.toLane;
+        const color = getColor(from);
+
+        if (from > to) {
+          // Merge coming from right → draw ╱ at the from position
+          cells[from * 2] = { ch: "╱", color };
+          // Fill horizontal between
+          for (let j = to * 2 + 1; j < from * 2; j++) {
+            if (typeof cells[j] === "string" || !cells[j]) cells[j] = { ch: "─", color };
+          }
+        } else if (from < to) {
+          cells[from * 2] = { ch: "╲", color };
+          for (let j = from * 2 + 1; j < to * 2; j++) {
+            if (typeof cells[j] === "string" || !cells[j]) cells[j] = { ch: "─", color };
+          }
+        }
+      }
+
+      let connStr = "";
+      for (const c of cells) {
+        if (c && typeof c === "object") connStr += c.color(c.ch);
+        else connStr += " ";
+      }
+      lines.push(`  ${connStr}`);
+    }
+
+    // === Main commit row ===
+    const cells = new Array(maxLanes * 2).fill(" ");
+
+    // Pass-through lanes
+    for (const lane of row.activeLanes) {
+      cells[lane * 2] = { ch: "│", color: getColor(lane) };
+    }
+
+    // Commit node (overrides pass-through)
+    cells[row.lane * 2] = { ch: "●", color: getColor(row.lane), bold: true };
+
+    let graphStr = "";
+    for (const c of cells) {
+      if (c && typeof c === "object") {
+        graphStr += c.bold ? c.color.bold(c.ch) : c.color(c.ch);
+      } else {
+        graphStr += " ";
+      }
+    }
+
+    // Ref badges
+    let refStr = "";
+    if (row.refs.length > 0) {
+      const tags = row.refs.map((r) => {
+        if (r.startsWith("HEAD ->")) {
+          return chalk.bgHex("#1a472a").hex("#4EC9B0").bold(` ${r} `);
+        } else if (r.startsWith("tag:")) {
+          return chalk.bgHex("#3d2e00").hex("#DCDCAA")(` ${r} `);
+        } else if (r.startsWith("origin/")) {
+          return chalk.bgHex("#3d1a1a").hex("#D16969")(` ${r} `);
+        }
+        return chalk.bgHex("#1a2a3d").hex("#569CD6")(` ${r} `);
+      });
+      refStr = " " + tags.join(" ");
+    }
+
+    const hashStr = chalk.hex("#858585")(row.hash);
+    const subject = row.isMerge
+      ? chalk.hex("#6A9955").italic(row.subject)
+      : chalk.hex("#D4D4D4")(row.subject);
+
+    lines.push(`  ${graphStr} ${hashStr}${refStr} ${subject}`);
+
+    // === Connection row below commit (branch-out and converge lines) ===
+    if (row.connections.some((c) => c.type === "branch-out" || c.type === "converge")) {
+      const bCells = new Array(maxLanes * 2).fill(" ");
+
+      // Pass-through lanes
+      for (const lane of row.activeLanes) {
+        bCells[lane * 2] = { ch: "│", color: getColor(lane) };
+      }
+      // Continue commit's own lane
+      bCells[row.lane * 2] = { ch: "│", color: getColor(row.lane) };
+
+      for (const conn of row.connections) {
+        if (conn.type !== "branch-out" && conn.type !== "converge") continue;
+        const from = conn.fromLane;
+        const to = conn.toLane;
+        const color = getColor(to);
+
+        if (to > from) {
+          bCells[to * 2] = { ch: "╲", color };
+          for (let j = from * 2 + 1; j < to * 2; j++) {
+            if (typeof bCells[j] === "string" || !bCells[j]) bCells[j] = { ch: "─", color };
+          }
+        } else if (to < from) {
+          bCells[to * 2] = { ch: "╱", color };
+          for (let j = to * 2 + 1; j < from * 2; j++) {
+            if (typeof bCells[j] === "string" || !bCells[j]) bCells[j] = { ch: "─", color };
+          }
+        }
+      }
+
+      let bStr = "";
+      for (const c of bCells) {
+        if (c && typeof c === "object") bStr += c.color(c.ch);
+        else bStr += " ";
+      }
+      lines.push(`  ${bStr}`);
+    }
+  }
+
+  return lines.join("\n");
+}
+
+/**
+ * Legacy fallback: render graph from git log --graph ASCII art.
+ * Used when computed layout is not available.
+ */
+function renderVisualGraphLegacy(graphLines) {
+  const lines = [chalk.bold("  Visual Graph:")];
+  lines.push("");
+
+  const LANE_COLORS = [
+    chalk.hex("#4EC9B0"), chalk.hex("#C586C0"), chalk.hex("#CE9178"),
+    chalk.hex("#569CD6"), chalk.hex("#DCDCAA"), chalk.hex("#D16969"),
+    chalk.hex("#B5CEA8"), chalk.hex("#9CDCFE"),
+  ];
+
+  // Pre-scan: identify lane positions (columns where | or * appear)
+  const lanePositions = new Set();
+  for (const entry of graphLines) {
+    const g = entry.graph || "";
+    for (let i = 0; i < g.length; i++) {
+      if (g[i] === "|" || g[i] === "*") lanePositions.add(i);
+    }
+  }
+  const sortedPositions = [...lanePositions].sort((a, b) => a - b);
+  const posToLane = new Map();
+  sortedPositions.forEach((pos, idx) => posToLane.set(pos, idx));
+
+  function getColor(pos) {
+    const lane = posToLane.get(pos);
+    if (lane !== undefined) return LANE_COLORS[lane % LANE_COLORS.length];
+    // Find nearest known lane
+    let best = 0, minDist = Infinity;
+    for (const [lPos, lIdx] of posToLane) {
+      if (Math.abs(pos - lPos) < minDist) { minDist = Math.abs(pos - lPos); best = lIdx; }
+    }
+    return LANE_COLORS[best % LANE_COLORS.length];
+  }
+
+  function nearestColor(graph, idx, ch) {
+    if (ch === "/") {
+      for (let j = idx + 1; j < graph.length; j++) if (graph[j] === "|" || graph[j] === "*") return getColor(j);
+      for (let j = idx - 1; j >= 0; j--) if (graph[j] === "|" || graph[j] === "*") return getColor(j);
+    } else {
+      for (let j = idx - 1; j >= 0; j--) if (graph[j] === "|" || graph[j] === "*") return getColor(j);
+      for (let j = idx + 1; j < graph.length; j++) if (graph[j] === "|" || graph[j] === "*") return getColor(j);
+    }
+    return getColor(idx);
+  }
+
+  for (const entry of graphLines) {
+    const graph = entry.graph || "";
+    let colored = "";
+    for (let i = 0; i < graph.length; i++) {
+      const ch = graph[i];
+      if (ch === "*") { colored += getColor(i).bold("●"); }
+      else if (ch === "|") { colored += getColor(i)("│"); }
+      else if (ch === "/") { colored += nearestColor(graph, i, "/")("╱"); }
+      else if (ch === "\\") { colored += nearestColor(graph, i, "\\")("╲"); }
+      else if (ch === "_") { colored += nearestColor(graph, i, "\\")("─"); }
+      else { colored += ch; }
+    }
+
+    if (entry.type === "commit" && entry.hash) {
+      let refStr = "";
+      if (entry.refs.length > 0) {
+        const tags = entry.refs.map((r) => {
+          if (r.startsWith("HEAD ->")) return chalk.bgHex("#1a472a").hex("#4EC9B0").bold(` ${r} `);
+          if (r.startsWith("tag:")) return chalk.bgHex("#3d2e00").hex("#DCDCAA")(` ${r} `);
+          if (r.startsWith("origin/")) return chalk.bgHex("#3d1a1a").hex("#D16969")(` ${r} `);
+          return chalk.bgHex("#1a2a3d").hex("#569CD6")(` ${r} `);
+        });
+        refStr = " " + tags.join(" ");
+      }
+      const hashStr = chalk.hex("#858585")(entry.hash);
+      const subject = entry.isMerge
+        ? chalk.hex("#6A9955").italic(entry.subject)
+        : chalk.hex("#D4D4D4")(entry.subject);
+      lines.push(`  ${colored} ${hashStr}${refStr} ${subject}`);
+    } else {
+      lines.push(`  ${colored}`);
+    }
+  }
+
+  return lines.join("\n");
+}
+
+function formatAge(date) {
+  if (!date) return "—";
+  const days = Math.floor((Date.now() - new Date(date).getTime()) / 86400000);
+  if (days === 0) return "today";
+  if (days === 1) return "1d ago";
+  if (days < 30) return days + "d ago";
+  if (days < 365) return Math.floor(days / 30) + "mo ago";
+  return Math.floor(days / 365) + "y ago";
 }
 
 // ─── Helpers ────────────────────────────────────────────────

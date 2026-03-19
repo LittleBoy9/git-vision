@@ -98,7 +98,7 @@ export function formatJSON(report) {
     output.monorepo = {
       detected: report.monorepo.detected,
       total: report.monorepo.total,
-      workspaces: report.monorepo.workspaces?.map((ws) => ({
+      workspaces: (report.monorepo.workspaces || []).map((ws) => ({
         name: ws.workspace.name,
         path: ws.workspace.path,
         skipped: ws.skipped,
@@ -106,6 +106,32 @@ export function formatJSON(report) {
         grade: ws.skipped ? null : ws.healthScore?.grade?.letter,
         stats: ws.stats || null,
       })),
+    };
+  }
+
+  if (report.branches) {
+    output.branches = {
+      currentBranch: report.branches.currentBranch,
+      branches: report.branches.branches.map((b) => ({
+        name: b.name,
+        type: b.type,
+        creator: b.creator,
+        createdAt: b.createdAt,
+        lastActivity: b.lastActivity,
+        aheadCount: b.aheadCount,
+        lifespan: b.lifespan,
+        isMerged: b.isMerged,
+      })),
+      mergeGraph: report.branches.mergeGraph,
+      graphLayout: report.branches.graphLayout || null,
+      staleBranches: report.branches.staleBranches.map((b) => ({
+        name: b.name,
+        creator: b.creator,
+        lastActivity: b.lastActivity,
+        lifespan: b.lifespan,
+      })),
+      creators: report.branches.creators,
+      stats: report.branches.stats,
     };
   }
 
