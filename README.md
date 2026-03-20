@@ -13,6 +13,8 @@
 Surface risky files, knowledge silos, and hidden dependencies from your Git history.<br>
 No API tokens. No config. Works with **any** Git repo.
 
+### [🌐 Visit This →](https://littleboy9.github.io/git-vision/)
+
 ```bash
 npx git-vision
 ```
