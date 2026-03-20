@@ -41,6 +41,20 @@ git-vision/
 │       ├── json.js             # CI-friendly JSON output
 │       ├── html.js             # Browser-based HTML report
 │       └── treemap.js          # V2: Squarified treemap visualization
+├── tests/
+│   ├── _helpers.js             # Shared test data factories
+│   ├── hotspots.test.js        # Hotspot analyzer tests
+│   ├── busFactor.test.js       # Bus factor tests
+│   ├── coupling.test.js        # Coupling tests
+│   ├── codeAge.test.js         # Code age tests
+│   ├── contributors.test.js    # Contributors tests
+│   ├── knowledgeLoss.test.js   # Knowledge loss tests
+│   ├── healthScore.test.js     # Health score tests
+│   └── ignores.test.js         # Ignore pattern tests
+├── action.yml                  # GitHub Action (composite)
+├── .github/
+│   ├── scripts/format-pr-comment.js  # PR comment formatter
+│   └── workflows/git-vision-pr.yml   # Example PR workflow
 ├── package.json
 ├── CLAUDE.md
 └── README.md
@@ -66,7 +80,7 @@ git-vision/
 ```bash
 npm run dev          # Run locally: node bin/cli.js
 npm link             # Link for local testing as `git-vision`
-npm test             # Run tests (when added)
+npm test             # Run tests (node:test, 46 tests across 8 suites)
 ```
 
 ## Analysis Modules
@@ -142,7 +156,24 @@ npm test             # Run tests (when added)
 - **Terminal rendering**: Lane-based coloring with `●` nodes, `│` lines, `╱`/`╲` diagonals, colored ref badges
 - **HTML rendering**: SVG-based graph with bezier curves, glowing nodes, per-lane colors — GitLens-style visualization
 
-#### 12. Treemap Visualization (formatters/treemap.js)
+#### 12. Knowledge Loss Detection (knowledgeLoss.js)
+- Detects files/modules where key contributors stopped committing
+- Extends bus factor with time dimension: historical authors vs currently active
+- Per-file analysis: departed authors, knowledge lost %, at-risk flag
+- Global departed contributors list with last seen dates
+- Configurable inactivity threshold (default: 180 days)
+- `knowledge-loss` subcommand
+
+#### 13. GitHub Action (action.yml)
+- Composite GitHub Action for PR risk analysis
+- Auto-runs `git-vision diff` on pull requests
+- Posts formatted markdown comment with risk score, badge, details
+- Updates existing comment on re-push (deduplication via HTML marker)
+- Exits with code 1 on critical risk (CI gate)
+- Configurable: base branch, fail-on-critical, comment toggle
+- Outputs: `risk-score`, `risk-level` for downstream steps
+
+#### 14. Treemap Visualization (formatters/treemap.js)
 - Squarified treemap algorithm (pure JS, no deps)
 - Rectangle size = LOC, color = risk score
 - Canvas-based with hover tooltips
@@ -162,7 +193,7 @@ npm test             # Run tests (when added)
 - `--blame` — enable git blame analysis (V2)
 - `--compare <period>` — compare time periods (V2)
 - `--workspace [path]` — enable monorepo mode (V2)
-- Subcommands: hotspots, coupling, bus-factor, age, contributors, blame, trends, monorepo, branches, diff, remote, init
+- Subcommands: hotspots, coupling, bus-factor, age, contributors, knowledge-loss, blame, trends, monorepo, branches, diff, remote, init
 
 ## Smart Defaults
 - Auto-filters lock files, binaries, generated code, node_modules, dist, etc.
@@ -192,9 +223,9 @@ npm test             # Run tests (when added)
 ## Future Plans (V3+)
 
 ### High Priority (Adoption Drivers)
-- [ ] **GitHub Action** — run on every PR, auto-comment with risk score + recommendations, exit code 1 on critical risk
+- [x] **GitHub Action** — run on every PR, auto-comment with risk score + recommendations, exit code 1 on critical risk
 - [ ] **AI-powered summary** — LLM explains repo health in plain English (Claude API integration)
-- [ ] **Author Knowledge Loss Detection** — flag modules where key authors stopped contributing (enhances bus factor with time dimension)
+- [x] **Author Knowledge Loss Detection** — flag modules where key authors stopped contributing (enhances bus factor with time dimension)
 
 ### Medium Priority (Feature Parity + Differentiation)
 - [ ] **Author Activity Timeline** — commits/lines per author over time, shows ramp-up/departure patterns

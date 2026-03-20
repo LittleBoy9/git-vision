@@ -5,6 +5,7 @@ import { analyzeCoupling } from "./analyzers/coupling.js";
 import { analyzeCodeAge } from "./analyzers/codeAge.js";
 import { analyzeContributors } from "./analyzers/contributors.js";
 import { analyzeBlame } from "./analyzers/blame.js";
+import { analyzeKnowledgeLoss } from "./analyzers/knowledgeLoss.js";
 import { analyzeTrends } from "./analyzers/trends.js";
 import { analyzeMonorepo } from "./analyzers/monorepo.js";
 import { analyzeDiff } from "./analyzers/diff.js";
@@ -99,6 +100,12 @@ export async function analyze(cliOpts = {}) {
 
   if (!module || module === "contributors") {
     report.contributors = analyzeContributors(fileSummaries, commits, {
+      top: options.top,
+    });
+  }
+
+  if (!module || module === "knowledge-loss") {
+    report.knowledgeLoss = analyzeKnowledgeLoss(fileSummaries, commits, {
       top: options.top,
     });
   }

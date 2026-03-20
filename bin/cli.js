@@ -70,6 +70,13 @@ program
     await runAnalysis("contributors", program.opts());
   });
 
+program
+  .command("knowledge-loss")
+  .description("Detect files where key contributors have stopped contributing")
+  .action(async () => {
+    await runAnalysis("knowledge-loss", program.opts());
+  });
+
 // V2 subcommands
 program
   .command("blame")

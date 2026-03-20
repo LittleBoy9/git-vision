@@ -4,8 +4,18 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>git-vision — X-Ray Your Codebase</title>
-<meta name="description" content="Zero-config CLI that analyzes Git history to surface risky files, knowledge silos, and hidden dependencies. One command. Any repo.">
+<meta name="description" content="Zero-config CLI that analyzes Git history to surface risky files, knowledge silos, and hidden dependencies. Hotspot detection, bus factor, change coupling, code age, blame ownership, trend tracking, monorepo support, and PR risk scoring. One command. Any repo.">
+<meta name="keywords" content="git analysis, code quality, hotspots, bus factor, technical debt, CLI tool, developer tools, code review, git blame, monorepo, code ownership, knowledge silo, change coupling">
+<meta name="author" content="Sounak Das">
 <meta name="theme-color" content="#f05033">
+<meta property="og:title" content="git-vision — X-Ray Your Codebase">
+<meta property="og:description" content="Zero-config CLI that analyzes Git history to surface risky files, knowledge silos, and hidden dependencies. One command. Any repo.">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://github.com/LittleBoy9/git-vision">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="git-vision — X-Ray Your Codebase">
+<meta name="twitter:description" content="Zero-config CLI for Git history intelligence. Surfaces risky files, knowledge silos, and hidden dependencies.">
+<link rel="canonical" href="https://github.com/LittleBoy9/git-vision">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🔍</text></svg>">
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
@@ -573,7 +583,7 @@ section{position:relative}
   <!-- HERO -->
   <section class="hero">
     <div class="hero-glow"></div>
-    <div class="badge"><span class="badge-dot"></span> v2.0 — Now with Blame, Trends & Monorepo</div>
+    <div class="badge"><span class="badge-dot"></span> One command. Full picture. Actionable.</div>
     <h1 class="hero-title">
       <span class="line"><span class="gradient">X-Ray Your</span></span>
       <span class="line">Codebase.</span>
@@ -714,7 +724,7 @@ section{position:relative}
   <section id="commands" class="section-pad">
     <div class="section-header">
       <div class="section-label reveal">CLI</div>
-      <h2 class="section-title reveal rd1"><span class="highlight">14 Commands.</span> Zero Config.</h2>
+      <h2 class="section-title reveal rd1"><span class="highlight">15 Commands.</span> Zero Config.</h2>
       <p class="section-sub reveal rd2">Every analysis module is a subcommand. Mix with flags for precise control.</p>
     </div>
     <div class="cmd-grid">
@@ -730,8 +740,9 @@ section{position:relative}
       <div class="cmd-item reveal rd5"><div class="cmd-name">git-vision monorepo</div><div class="cmd-desc">Per-workspace analysis</div></div>
       <div class="cmd-item reveal rd6"><div class="cmd-name">git-vision branches</div><div class="cmd-desc">Branch graph &amp; lifecycle analysis</div></div>
       <div class="cmd-item reveal rd6"><div class="cmd-name">git-vision remote &lt;url&gt;</div><div class="cmd-desc">Analyze any remote repo instantly</div></div>
+      <div class="cmd-item reveal rd7"><div class="cmd-name">git-vision knowledge-loss</div><div class="cmd-desc">Departed contributor detection</div></div>
       <div class="cmd-item reveal rd7"><div class="cmd-name">git-vision init</div><div class="cmd-desc">Auto-detect stack &amp; generate config</div></div>
-      <div class="cmd-item reveal rd7"><div class="cmd-name">--format html</div><div class="cmd-desc">Interactive treemap &amp; SVG branch graph</div></div>
+      <div class="cmd-item reveal rd8"><div class="cmd-name">--format html</div><div class="cmd-desc">Interactive treemap &amp; SVG branch graph</div></div>
     </div>
   </section>
 

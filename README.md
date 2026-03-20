@@ -1,178 +1,409 @@
+<div align="center">
+
 # git-vision
 
-**One command. Full picture. Actionable.**
+**X-ray your codebase. One command. Zero config.**
 
-A zero-config CLI that analyzes your Git history to surface risky files, unstable modules, knowledge silos, and hidden dependencies. Based on proven code forensics methodology.
+[![npm version](https://img.shields.io/npm/v/git-vision?color=f05033&label=npm&style=flat-square)](https://www.npmjs.com/package/git-vision)
+[![license](https://img.shields.io/npm/l/git-vision?color=green&style=flat-square)](https://github.com/LittleBoy9/git-vision/blob/main/LICENSE)
+[![node](https://img.shields.io/node/v/git-vision?color=58a6ff&style=flat-square)](https://nodejs.org)
+[![downloads](https://img.shields.io/npm/dm/git-vision?color=fb923c&style=flat-square)](https://www.npmjs.com/package/git-vision)
+[![tests](https://img.shields.io/badge/tests-46%20passing-3fb950?style=flat-square)](#tests)
+
+Surface risky files, knowledge silos, and hidden dependencies from your Git history.<br>
+No API tokens. No config. Works with **any** Git repo.
 
 ```bash
 npx git-vision
 ```
 
+
+</div>
+
+---
+
 ## Why git-vision?
 
-Your Git history is a goldmine of insights that most teams ignore. `git-vision` mines that data to answer critical questions:
+Your Git history is a goldmine of insights most teams ignore. `git-vision` mines that data to answer critical questions:
 
-- **Where will the next bug appear?** (Hotspot analysis)
-- **What happens if Sarah leaves?** (Bus factor)
-- **Why do these unrelated files always break together?** (Change coupling)
-- **What code has everyone forgotten about?** (Code age)
-- **Who actually owns what?** (Contributor patterns + git blame)
-- **Are things getting better or worse?** (Trend tracking)
-- **Which package in our monorepo is the riskiest?** (Monorepo support)
+| Question | Module |
+|----------|--------|
+| Where will the next bug appear? | [Hotspots](#hotspot-detection) |
+| What happens if Sarah leaves? | [Bus Factor](#bus-factor-analysis) |
+| Why do these unrelated files break together? | [Change Coupling](#change-coupling) |
+| What code has everyone forgotten about? | [Code Age](#code-age) |
+| Who actually owns what? | [Blame](#true-ownership-via-git-blame) |
+| Are things getting better or worse? | [Trends](#trend-tracking) |
+| Which package is the riskiest? | [Monorepo](#monorepo-support) |
+| Who stopped contributing to critical code? | [Knowledge Loss](#knowledge-loss-detection) |
+| Is this PR risky? | [Diff](#pr-risk-analysis) |
+| What does our branch history look like? | [Branches](#branch-analysis) |
 
-No setup. No config files. No GitHub API tokens. Just run it.
+Based on Adam Tornhill's *"Your Code as a Crime Scene"* methodology.
+
+---
+
+## Quick Start
+
+```bash
+# Full analysis — health score + all modules
+npx git-vision
+
+# Analyze any remote repo (no manual cloning)
+npx git-vision remote facebook/react
+npx git-vision remote expressjs/express branches
+
+# HTML report with interactive treemap
+npx git-vision --format html
+
+# JSON for CI pipelines
+npx git-vision --format json
+```
+
+---
 
 ## Features
 
 ### Hotspot Detection
-Files that are both frequently changed AND complex are where bugs are most likely to appear. `git-vision` combines churn frequency with file complexity to rank your riskiest files.
 
-### Bus Factor Analysis
-Find files where knowledge is concentrated in one person. If they leave, those files become unmaintainable. `git-vision` flags single-owner files and modules.
-
-### Change Coupling
-Discover files that always change together — even across different modules. These hidden dependencies reveal architectural problems your import graph doesn't show.
-
-### Code Age
-Identify stale zones (ancient untouched code) and volatile files (sudden change spikes). Both are signals worth investigating.
-
-### Contributor Patterns
-See who owns what, how contributions are distributed, and where team fragmentation creates coordination overhead.
-
-### Health Score
-A single 0-100 score combining all metrics, with a letter grade and plain-English recommendations.
-
-### True Ownership via Git Blame (V2)
-Goes beyond commit counts to line-level ownership. Answers "who actually wrote the code that exists today?" — more accurate than commit history alone.
+Files with high churn AND complexity are where bugs cluster.
 
 ```bash
-npx git-vision --blame
-npx git-vision blame
+npx git-vision hotspots
 ```
 
-### Trend Tracking (V2)
-Compare two time periods to see if your codebase is getting healthier or worse. Tracks hotspot movement, bus factor changes, churn velocity, and contributor flow.
+**Formula:** `risk = churn_frequency x lines_of_code`<br>
+Test files are automatically dampened (0.3x weight). Config files excluded.
+
+---
+
+### Bus Factor Analysis
+
+Files where one person owns >80% of changes = bus-factor-1 risk.
 
 ```bash
-npx git-vision --compare 3months    # last 3 months vs previous 3 months
-npx git-vision trends               # default: 3 months
+npx git-vision bus-factor
+```
+
+---
+
+### Change Coupling
+
+Files that always change together reveal hidden dependencies your import graph doesn't show.
+
+```bash
+npx git-vision coupling
+```
+
+Cross-module couplings are prioritized — those are the architecture smells.
+
+---
+
+### Code Age
+
+Stale zones (ancient untouched code) and volatile files (sudden change spikes).
+
+```bash
+npx git-vision age
+```
+
+Categories: `ancient` (>1yr) / `stale` (>6mo) / `aging` (>3mo) / `active` / `volatile`
+
+---
+
+### Contributor Patterns
+
+Who owns what, how contributions are distributed, where team fragmentation creates overhead.
+
+```bash
+npx git-vision contributors
+```
+
+Shannon entropy-based fragmentation scoring per module.
+
+---
+
+### Knowledge Loss Detection
+
+Detects files where key contributors have stopped committing. Extends bus factor with a time dimension.
+
+```bash
+npx git-vision knowledge-loss
+```
+
+> "Alice wrote 80% of payments.ts but hasn't committed in 7 months."
+
+Configurable inactivity threshold (default: 180 days).
+
+---
+
+### True Ownership via Git Blame
+
+Goes beyond commit counts to **line-level ownership**. A developer who rewrote a file owns more than someone who made 10 typo fixes.
+
+```bash
+npx git-vision blame
+npx git-vision --blame          # include with full analysis
+```
+
+---
+
+### Trend Tracking
+
+Compare two time periods. See if your codebase is improving or rotting.
+
+```bash
+npx git-vision trends
 npx git-vision trends --compare 6months
 ```
 
-### Treemap Visualization (V2)
-The HTML report includes an interactive treemap where rectangle size = complexity and color = risk. Hover for details.
+Tracks: hotspot movement, bus factor changes, churn velocity, new/lost contributors.
+
+---
+
+### PR Risk Analysis
+
+Score any branch before merging. Catches risky PRs before review.
 
 ```bash
-npx git-vision --format html
+npx git-vision diff main
+npx git-vision diff develop
 ```
 
-### Monorepo Support (V2)
-Auto-detects workspaces (npm, yarn, pnpm, lerna) and analyzes each package independently with its own health score.
+Risk factors: hotspot files touched, bus-factor-1 files, missing coupled files, diff size.<br>
+**Exit code 1 on critical risk** — perfect for CI gates.
+
+---
+
+### Branch Analysis
+
+GitLens-style branch graph with topology, merge history, and stale branch detection.
 
 ```bash
-npx git-vision --workspace           # auto-detect workspaces
-npx git-vision --workspace packages/api  # specific workspace
-npx git-vision monorepo              # full monorepo report
+npx git-vision branches
+npx git-vision branches --format html   # SVG graph with bezier curves
 ```
 
-### Config File Support (V2)
-Create a `.gitvisionrc` or `.gitvisionrc.json` in your repo root to set team defaults:
+---
+
+### Monorepo Support
+
+Auto-detects workspaces (npm, yarn, pnpm, lerna) and analyzes each independently.
+
+```bash
+npx git-vision monorepo
+npx git-vision --workspace
+npx git-vision --workspace packages/api
+```
+
+---
+
+### Remote Repo Analysis
+
+Analyze any public repo without cloning it yourself. Uses blobless clone for speed.
+
+```bash
+npx git-vision remote facebook/react
+npx git-vision remote expressjs/express --format html
+npx git-vision remote https://github.com/vercel/next.js.git --blame
+```
+
+---
+
+### Health Score
+
+A single **0-100 score** combining all metrics.
+
+| Weight | Module |
+|--------|--------|
+| 30% | Hotspots |
+| 25% | Bus Factor |
+| 20% | Coupling |
+| 15% | Code Age |
+| 10% | Team Distribution |
+
+Grade scale: **A** (90+) / **B** (75+) / **C** (60+) / **D** (40+) / **F** (<40)
+
+---
+
+## GitHub Action
+
+Add `git-vision` to your CI pipeline. Auto-comments on PRs with risk analysis.
+
+```yaml
+# .github/workflows/pr-risk.yml
+name: PR Risk Analysis
+on:
+  pull_request:
+    branches: [main]
+permissions:
+  pull-requests: write
+jobs:
+  analyze:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Required: git-vision needs full history
+      - uses: LittleBoy9/git-vision@v2
+        with:
+          base-branch: main
+```
+
+**What you get:**
+- Risk score badge on every PR
+- Summary table (files changed, hotspots hit, bus-factor risks)
+- Severity-grouped risk details
+- Auto-updates comment on re-push
+- Exit code 1 on critical risk (blocks merge)
+
+### Action Inputs
+
+| Input | Default | Description |
+|-------|---------|-------------|
+| `base-branch` | `main` | Base branch to compare against |
+| `fail-on-critical` | `true` | Exit 1 on critical risk |
+| `comment-on-pr` | `true` | Post analysis as PR comment |
+| `github-token` | `${{ github.token }}` | Token for PR comments |
+
+### Action Outputs
+
+| Output | Description |
+|--------|-------------|
+| `risk-score` | Numeric risk score (0-100) |
+| `risk-level` | `low` / `medium` / `high` / `critical` |
+
+---
+
+## All Commands
+
+```bash
+npx git-vision                        # Full analysis with health score
+npx git-vision hotspots               # Riskiest files by churn x complexity
+npx git-vision bus-factor             # Knowledge silo detection
+npx git-vision coupling               # Hidden architectural dependencies
+npx git-vision age                    # Stale zones & volatile files
+npx git-vision contributors           # Per-module team patterns
+npx git-vision knowledge-loss         # Departed contributor detection
+npx git-vision blame                  # True line-level ownership
+npx git-vision trends                 # Health over time
+npx git-vision monorepo               # Per-workspace analysis
+npx git-vision branches               # Branch graph & lifecycle
+npx git-vision diff <branch>          # PR risk scoring
+npx git-vision remote <url> [module]  # Analyze any remote repo
+npx git-vision init                   # Generate smart config
+```
+
+## Flags
+
+| Flag | Description |
+|------|-------------|
+| `--format <type>` | `terminal` (default), `json`, `html` |
+| `--top <n>` | Number of results (default: 10) |
+| `--since <period>` | Limit window (e.g. `6months`, `1year`) |
+| `--ignore <patterns>` | Comma-separated globs to exclude |
+| `--path <dir>` | Path to git repository |
+| `--blame` | Enable git blame analysis (slower) |
+| `--compare <period>` | Compare time periods |
+| `--workspace [path]` | Enable monorepo mode |
+
+---
+
+## Output Formats
+
+### Terminal (default)
+Color-coded tables, risk bars, health scores, recommendations. Designed for humans.
+
+### JSON (`--format json`)
+Structured output for CI/CD. Exit code 1 when health score < 40.
+
+### HTML (`--format html`)
+Self-contained report with dark theme, interactive treemap, SVG branch graph. Opens in browser automatically.
+
+---
+
+## Configuration
+
+Generate a config file with smart defaults for your stack:
+
+```bash
+npx git-vision init
+```
+
+Or create `.gitvisionrc.json` manually:
 
 ```json
 {
   "format": "terminal",
   "top": 15,
-  "ignore": ["*.test.js", "dist/**", "node_modules/**"],
+  "ignore": ["*.test.js", "dist/**"],
   "thresholds": {
     "busFactor": { "ownershipThreshold": 0.8 },
-    "coupling": { "minSharedCommits": 5, "minCouplingDegree": 0.3 },
-    "healthScore": { "critical": 40 }
+    "coupling": { "minSharedCommits": 5, "minCouplingDegree": 0.3 }
   },
-  "blame": { "enabled": true, "maxFiles": 50 },
+  "blame": { "enabled": false, "maxFiles": 50 },
   "monorepo": { "enabled": false }
 }
 ```
 
-## Usage
+Supports: Node.js, Next.js, Python, Go, Rust, Java, Ruby, PHP. Auto-detects monorepos.
+
+**Priority:** defaults < `.gitvisionrc` < CLI flags (CLI always wins)
+
+---
+
+## Tests
 
 ```bash
-# Full analysis (all modules)
-npx git-vision
-
-# Individual analyzers
-npx git-vision hotspots
-npx git-vision coupling
-npx git-vision bus-factor
-npx git-vision age
-npx git-vision contributors
-npx git-vision blame          # V2: line-level ownership
-npx git-vision trends         # V2: period comparison
-npx git-vision monorepo       # V2: per-workspace analysis
-
-# Options
-npx git-vision --format json          # CI-friendly JSON output
-npx git-vision --format html          # HTML report with treemap
-npx git-vision --top 20               # Show top 20 results (default: 10)
-npx git-vision --since 6months        # Limit analysis window
-npx git-vision --ignore "*.test.js,dist/**"  # Exclude patterns
-npx git-vision --path /path/to/repo   # Analyze a different repo
-npx git-vision --blame                # Enable git blame analysis
-npx git-vision --compare 3months      # Compare time periods
-npx git-vision --workspace            # Enable monorepo mode
+npm test
 ```
 
-## Output Formats
+46 tests across 8 suites covering all analyzers:
 
-### Terminal (default)
-Beautiful, color-coded tables with risk bars, health scores, and recommendations. Designed for human readability.
+| Suite | Tests |
+|-------|-------|
+| Hotspots | 5 |
+| Bus Factor | 5 |
+| Coupling | 5 |
+| Code Age | 5 |
+| Contributors | 4 |
+| Knowledge Loss | 5 |
+| Health Score | 5 |
+| Ignores | 12 |
 
-### JSON (`--format json`)
-Structured JSON for CI/CD pipelines. Exit code 1 when health score < 40 (critical).
-
-```json
-{
-  "healthScore": {
-    "overall": 72,
-    "grade": "B",
-    "recommendations": [...]
-  },
-  "hotspots": { "results": [...] },
-  "busFactor": { "results": [...] },
-  "trends": { "overallDirection": "improving", ... }
-}
-```
-
-### HTML (`--format html`)
-Self-contained HTML report with dark theme, interactive treemap, and visual breakdowns. Opens automatically in your browser.
-
-## CI/CD Integration
-
-`git-vision` exits with code 1 when the health score drops below 40 (critical), making it easy to add as a CI check:
-
-```yaml
-# GitHub Actions
-- name: Repository Health Check
-  run: npx git-vision --format json
-```
+---
 
 ## How It Works
 
-`git-vision` analyzes your `git log` data — nothing more. It doesn't need API tokens, doesn't call any external services, and works with any Git repository (GitHub, GitLab, Bitbucket, self-hosted — doesn't matter).
+`git-vision` reads your `git log` — nothing more.
 
-The analysis is based on research from Adam Tornhill's "Your Code as a Crime Scene" — using forensic techniques on version control data to predict where defects will cluster.
+- No API tokens needed
+- No external services called
+- Works with GitHub, GitLab, Bitbucket, self-hosted — anything with Git
+- Smart defaults filter lock files, binaries, generated code, `node_modules`, `dist`, etc.
 
 ### Scoring
 
-- **Hotspot score**: `churn_frequency x lines_of_code` — high churn + large file = high risk
-- **Bus factor**: Files where one author owns >80% of changes
-- **Coupling degree**: `shared_commits / min(total_commits_A, total_commits_B)`
-- **Health score**: Weighted composite (hotspots 30%, bus factor 25%, coupling 20%, code age 15%, team 10%)
+- **Hotspot**: `churn x LOC` — high churn + large file = high risk
+- **Bus factor**: Authors where one owns >80% of changes
+- **Coupling**: `shared_commits / min(total_A, total_B)`
+- **Health**: Weighted composite (hotspots 30%, bus factor 25%, coupling 20%, code age 15%, team 10%)
+
+---
 
 ## Requirements
 
-- Node.js >= 18
+- **Node.js >= 18**
 - A Git repository with commit history
+
+---
+
+## Author
+
+**[Sounak Das](https://sounakdas.in)**
+
+---
 
 ## License
 
-MIT
+[MIT](LICENSE) - Use it, fork it, ship it.

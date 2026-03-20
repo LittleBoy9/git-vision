@@ -207,6 +207,7 @@ export function formatHTML(report) {
   <div id="coupling-section"></div>
   <div id="code-age-section"></div>
   <div id="contributors-section"></div>
+  <div id="knowledge-loss-section"></div>
   <div id="blame-section"></div>
   <div id="trends-section"></div>
   <div id="monorepo-section"></div>
@@ -328,6 +329,37 @@ export function formatHTML(report) {
         '<h2>Contributors</h2>' +
         '<table><tr><th>Author</th><th>Commits</th><th>Share</th></tr>' +
         rows + '</table>';
+    }
+
+    // Knowledge Loss
+    if (report.knowledgeLoss && report.knowledgeLoss.results?.length) {
+      const atRisk = report.knowledgeLoss.results.filter(f => f.isAtRisk);
+      let html = '<h2>Knowledge Loss</h2>';
+
+      if (report.knowledgeLoss.departedContributors?.length) {
+        html += '<p style="color:#8b949e;margin-bottom:1rem">' +
+          report.knowledgeLoss.stats.totalDepartedAuthors + ' departed contributors · ' +
+          report.knowledgeLoss.stats.filesAtRisk + ' files at risk (' + report.knowledgeLoss.stats.riskPercentage + '%)</p>';
+        html += '<div style="display:flex;flex-wrap:wrap;gap:0.5rem;margin-bottom:1.5rem">';
+        report.knowledgeLoss.departedContributors.slice(0, 8).forEach(d => {
+          const ago = d.daysSinceLastCommit ? d.daysSinceLastCommit + 'd ago' : 'unknown';
+          html += '<span class="tag tag-high" style="font-size:0.8rem">' + d.author + ' — ' + d.totalCommits + ' commits, ' + ago + '</span>';
+        });
+        html += '</div>';
+      }
+
+      if (atRisk.length) {
+        html += '<table><tr><th>File</th><th>Knowledge Lost</th><th>Active</th><th>Departed</th></tr>';
+        atRisk.slice(0, 15).forEach(f => {
+          const cls = f.knowledgeLostPct >= 70 ? 'tag-high' : 'tag-medium';
+          html += '<tr><td>' + f.path + '</td>' +
+            '<td><span class="tag ' + cls + '">' + f.knowledgeLostPct + '%</span></td>' +
+            '<td>' + f.activeAuthors + '</td>' +
+            '<td>' + f.departedAuthors.length + '</td></tr>';
+        });
+        html += '</table>';
+      }
+      document.getElementById('knowledge-loss-section').innerHTML = html;
     }
 
     // Recommendations

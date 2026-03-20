@@ -67,6 +67,14 @@ export function formatJSON(report) {
     };
   }
 
+  if (report.knowledgeLoss) {
+    output.knowledgeLoss = {
+      results: report.knowledgeLoss.results,
+      departedContributors: report.knowledgeLoss.departedContributors,
+      stats: report.knowledgeLoss.stats,
+    };
+  }
+
   // V2 sections
   if (report.blame) {
     output.blame = {

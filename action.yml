@@ -1,0 +1,56 @@
+name: 'git-vision PR Analysis'
+description: 'Analyze PR risk using git history intelligence — surfaces risky files, knowledge silos, and hidden dependencies'
+branding:
+  icon: 'eye'
+  color: 'orange'
+inputs:
+  base-branch:
+    description: 'Base branch to compare against'
+    default: 'main'
+  fail-on-critical:
+    description: 'Exit with code 1 on critical risk'
+    default: 'true'
+  comment-on-pr:
+    description: 'Post analysis as PR comment'
+    default: 'true'
+  github-token:
+    description: 'GitHub token for PR comments'
+    default: '${{ github.token }}'
+outputs:
+  risk-score:
+    description: 'Risk score 0-100'
+    value: '${{ steps.analyze.outputs.risk-score }}'
+  risk-level:
+    description: 'Risk level (low/medium/high/critical)'
+    value: '${{ steps.analyze.outputs.risk-level }}'
+runs:
+  using: 'composite'
+  steps:
+    - uses: actions/setup-node@v4
+      with:
+        node-version: '18'
+    - id: analyze
+      run: |
+        npx git-vision@latest diff ${{ inputs.base-branch }} --format json > /tmp/gv-report.json 2>/dev/null || true
+        node ${{ github.action_path }}/.github/scripts/format-pr-comment.js /tmp/gv-report.json
+      shell: bash
+    - if: inputs.comment-on-pr == 'true' && github.event_name == 'pull_request'
+      run: |
+        # Find and update existing comment, or create new one
+        COMMENT_ID=$(gh api repos/${{ github.repository }}/issues/${{ github.event.pull_request.number }}/comments --jq '.[] | select(.body | contains("<!-- git-vision-analysis -->")) | .id' 2>/dev/null || echo "")
+        if [ -n "$COMMENT_ID" ]; then
+          gh api repos/${{ github.repository }}/issues/comments/$COMMENT_ID -X PATCH -f body="$(cat /tmp/gv-comment.md)"
+        else
+          gh pr comment ${{ github.event.pull_request.number }} --body-file /tmp/gv-comment.md
+        fi
+      shell: bash
+      env:
+        GH_TOKEN: ${{ inputs.github-token }}
+    - if: inputs.fail-on-critical == 'true'
+      run: |
+        LEVEL=$(cat /tmp/gv-risk-level.txt 2>/dev/null || echo "low")
+        if [ "$LEVEL" = "critical" ]; then
+          echo "::error::git-vision: Critical risk detected! Score: $(cat /tmp/gv-risk-score.txt)"
+          exit 1
+        fi
+      shell: bash

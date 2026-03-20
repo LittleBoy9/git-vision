@@ -54,6 +54,11 @@ export function formatTerminal(report) {
     lines.push("");
   }
 
+  if (report.knowledgeLoss) {
+    lines.push(renderKnowledgeLoss(report.knowledgeLoss));
+    lines.push("");
+  }
+
   // V2 sections
   if (report.blame) {
     lines.push(renderBlame(report.blame));
@@ -312,6 +317,59 @@ function renderRecommendations(recommendations) {
 
     lines.push(`  ${icon} ${color(r.message)}`);
   }
+
+  return lines.join("\n");
+}
+
+function renderKnowledgeLoss(kl) {
+  if (kl.results.length === 0) {
+    return sectionTitle("KNOWLEDGE LOSS") + "\n" + chalk.dim("  No knowledge loss detected.");
+  }
+
+  const lines = [sectionTitle("KNOWLEDGE LOSS", "warning")];
+
+  // Departed contributors summary
+  if (kl.departedContributors.length > 0) {
+    lines.push(chalk.bold("  Departed Contributors:"));
+    for (const d of kl.departedContributors.slice(0, 5)) {
+      const ago = d.daysSinceLastCommit
+        ? chalk.dim(`${d.daysSinceLastCommit}d ago`)
+        : chalk.dim("unknown");
+      lines.push(
+        `  ${chalk.red("-")} ${chalk.white(truncate(d.author, 25))}  ${chalk.cyan(d.totalCommits)} commits  ${chalk.dim("owned")} ${chalk.yellow(d.filesOwned)} files  ${ago}`
+      );
+    }
+    lines.push("");
+  }
+
+  // At-risk files
+  const atRisk = kl.results.filter((f) => f.isAtRisk);
+  if (atRisk.length > 0) {
+    lines.push(chalk.red.bold("  At-Risk Files:"));
+    const table = new Table({
+      head: ["File", "Lost %", "Active", "Departed", "Top Departed"].map((h) => chalk.dim(h)),
+      chars: tableChars(),
+      style: { head: [], border: ["dim"] },
+      colWidths: [38, 9, 8, 10, 22],
+    });
+
+    for (const f of atRisk.slice(0, 10)) {
+      const lostColor = f.knowledgeLostPct >= 70 ? chalk.red : chalk.yellow;
+      const topDep = f.departedAuthors[0];
+      table.push([
+        truncatePath(f.path, 36),
+        lostColor.bold(f.knowledgeLostPct + "%"),
+        chalk.green(f.activeAuthors),
+        chalk.red(f.departedAuthors.length),
+        chalk.dim(topDep ? truncate(topDep.author, 20) : "—"),
+      ]);
+    }
+    lines.push(table.toString());
+  }
+
+  lines.push(chalk.dim(
+    `  ${kl.stats.filesAtRisk} at-risk files (${kl.stats.riskPercentage}%) · ${kl.stats.totalDepartedAuthors} departed · ${kl.stats.totalActiveAuthors} active`
+  ));
 
   return lines.join("\n");
 }

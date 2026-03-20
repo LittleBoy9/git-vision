@@ -1,0 +1,16 @@
+name: PR Risk Analysis
+on:
+  pull_request:
+    branches: [main]
+permissions:
+  pull-requests: write
+jobs:
+  analyze:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Required: git-vision needs full history
+      - uses: ./
+        with:
+          base-branch: main
